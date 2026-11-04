@@ -2,14 +2,15 @@
 
 Plataforma para el cuidado, protección y bienestar de las mascotas. Se construye **por etapas**; este archivo dice qué está terminado y qué no.
 
-## Estado actual: Etapa 3 de 11 (cuentas, sesión y roles)
+## Estado actual: Etapa 4 de 11 (mascotas, carnet de salud, fotos y placa QR)
 
 | Etapa | Contenido | Estado |
 |---|---|---|
 | 1 | Estructura, diseño y navegación | Terminada |
-| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada e instalada en tu proyecto (verificador: 31/31) |
-| **3** | **Registro, inicio de sesión, recuperar contraseña, sesión, roles y protección de páginas** | **Escrita y probada contra un simulador de Supabase (105 pruebas de navegador). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_3.md`** |
-| 4–11 | Mascotas, directorio, denuncias, chat, notificaciones, planes, panel admin, publicación | Pendientes |
+| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **La Etapa 4 amplía el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 32 comprobaciones |
+| 3 | Registro, inicio de sesión, recuperar contraseña, sesión, roles y protección de páginas | Terminada y probada en tu sitio real |
+| **4** | **Mascotas, carnet de salud digital, subida de fotos (Supabase Storage) y placa QR (Huellita VIP)** | **Escrita y probada contra simuladores (133 pruebas de navegador + 351 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_4.md`** |
+| 5–11 | Directorio y panel de aliados, denuncias, chat, notificaciones, planes, panel admin, publicación | Pendientes |
 
 **Terminado en la Etapa 2** (carpeta `database/`)
 
@@ -18,9 +19,9 @@ Plataforma para el cuidado, protección y bienestar de las mascotas. Se construy
 - Los 5 planes (nombres, precios MXN y beneficios exactos) y los permisos de cada plan **aplicados en el servidor**, no solo en pantalla.
 - Denuncias anónimas **sin ningún dato que identifique a quien reporta**, con código de seguimiento, trampa anti-robots y límite de envíos.
 - Chat, notificaciones, guías, directorio con filtros, placa QR con token aleatorio, bitácora de acciones de administración.
-- 5 buckets de archivos (solo JPG/PNG/WebP, con tope de tamaño y de cantidad por persona).
+- 6 buckets de archivos (solo JPG/PNG/WebP, con tope de tamaño y de cantidad por persona). El sexto, `qr-photos`, se añadió en la Etapa 4.
 - Datos de demostración **opcionales y claramente falsos** (`06_datos_demo.sql`).
-- 319 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
+- 351 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
 
 **Cómo se probó la Etapa 2, con honestidad**
 
@@ -41,13 +42,31 @@ Las pruebas corrieron en un PostgreSQL 16 local con un simulador de Supabase (ro
 
 Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las pruebas corrieron en Chromium contra un **simulador** de Supabase que escribí según la documentación oficial de GoTrue y PostgREST. Si el servicio real responde distinto en algún detalle, solo lo sabremos al probar en tu sitio: por eso `GUIA_ETAPA_3.md` trae una lista de 15 comprobaciones. Se comprobó también que las pruebas detectan sabotajes (por ejemplo, quitar la regla que oculta las páginas privadas o el aviso entre pestañas).
 
-**Límite importante del plan gratuito de Supabase:** su servicio de correo de cortesía solo envía a los correos de tu equipo y a un máximo de 2 por hora. Para que cualquier persona pueda registrarse hará falta un SMTP propio (normalmente con dominio). Detalle y opciones en el Paso 4 de `GUIA_ETAPA_3.md`.
+**Terminado en la Etapa 4** (guía: `GUIA_ETAPA_4.md`)
+
+- **Mis mascotas** (`mascota.html`): crear, editar y eliminar fichas (máx. 30 por cuenta) con especie, raza, sexo, nacimiento, peso, descripción, información veterinaria y foto. Cada cuenta ve únicamente las suyas.
+- **Carnet de salud digital** (`carnet.html`): vacunas, desparasitaciones y citas veterinarias por mascota. Los límites del plan (Básica: sin carnet · Pro: 2 mascotas · VIP: ilimitado) los aplica **el servidor**, no solo la pantalla. Las citas se escriben y se muestran en hora de Ciudad de México.
+- **Fotos** (mascotas, perfil, placa): el navegador **reduce y vuelve a codificar cada imagen como JPEG antes de subirla**, lo que elimina los metadatos EXIF (modelo de cámara, fecha y, sobre todo, la **ubicación GPS**). Los buckets de mascotas y perfil son **privados**: las fotos se ven con enlaces firmados que caducan.
+- **Placa QR (Huellita VIP)**: el dueño elige qué publica (nombre, raza, mensaje, contacto, teléfono, foto). La página pública `qr.html?t=…` se abre **sin iniciar sesión**, no muestra correo ni dirección de nadie y responde igual ante un enlace inexistente o desactivado. El enlace puede regenerarse (el anterior deja de funcionar). El QR se genera en el navegador con un codificador propio (`js/qr.js`), sin servicios externos, y se puede descargar en PNG o SVG.
+- Todo texto que escribe una persona se muestra como **texto**, nunca como HTML.
+
+**Cómo se probó la Etapa 4, con honestidad**
+
+- 351 pruebas de SQL (PostgreSQL local con simulador de Supabase) y 32 comprobaciones del verificador.
+- 133 pruebas de navegador en Chromium con **las mismas cabeceras CSP del sitio** (`pruebas-web/probar_mascotas.py`), 105 de la Etapa 3 (siguen pasando) y 73 códigos QR generados que se leen con OpenCV (un lector independiente) en todas las versiones usadas.
+- Se hicieron **pruebas de sabotaje**: se rompió el código a propósito de 10 maneras (por ejemplo, mostrar el mensaje público como HTML, enviar la sesión en la consulta pública, no borrar la foto anterior, equivocar el huso horario) y las pruebas las detectaron. Dos de esas pruebas de sabotaje dejaron al descubierto huecos en mis propias pruebas, que se completaron.
+- **Lo que no se pudo probar:** el Storage real de Supabase. El simulador sigue la documentación oficial (subida con `FormData`, URLs firmadas con `POST /object/sign/<bucket>`, URL pública), pero si el servicio real responde distinto en algún detalle solo lo sabremos en tu sitio: por eso `GUIA_ETAPA_4.md` trae una lista de comprobaciones. Tampoco se probó el escaneo con un teléfono real.
+
+**Límite importante del plan gratuito de Supabase:** su servicio de correo de cortesía solo envía a los correos de tu equipo y a un máximo de 2 por hora. Para que cualquier persona pueda registrarse hará falta un SMTP propio. **Sin dominio** (decisión actual) no sirven Resend ni Brevo; la opción gratuita viable es una cuenta de Gmail exclusiva del proyecto con contraseña de aplicación (Paso 4 de `GUIA_ETAPA_3.md`). Los correos de notificación de la Etapa 9 se replantearán con ese límite.
 
 **No terminado (y no finge estarlo)**
 
-- **Solo cuentas y perfil están conectados a la base de datos.** El resto de formularios (mascotas, carnet, directorio, denuncias, chat…) siguen mostrando «se conecta en la Etapa N» y no guardan nada. No publiques datos reales todavía.
-- **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. Un administrador asigna los planes de pago manualmente (en la Etapa 9 se añade la «solicitud» de plan por parte del usuario). Los recordatorios por WhatsApp o correo están *previstos*, no activos.
-- **Faltan** subir foto de perfil (Etapa 4), eliminar la cuenta, el **aviso de privacidad y términos**, y el anti-robots en el registro (Turnstile, Etapa 6). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
+- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos y placa QR. **Todavía no:** directorio y panel de aliados, denuncias, chat, notificaciones y el panel de administración (siguen mostrando «se conecta en la Etapa N» y no guardan nada). No publiques datos reales todavía.
+- **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. Un administrador asigna los planes de pago manualmente (en la Etapa 9 se añade la «solicitud» de plan por parte del usuario). Los **recordatorios** de vacunas y citas por WhatsApp o correo están *previstos*, no activos: hoy el carnet solo marca «vencida» o «próxima» al abrirlo.
+- **Faltan** eliminar la cuenta, el **aviso de privacidad y términos**, y el anti-robots en el registro (Turnstile, Etapa 6). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
+- **Limpieza de archivos:** al reemplazar o quitar una foto, o eliminar una mascota, el navegador borra los archivos viejos; si se corta la conexión justo en ese momento puede quedar algún archivo huérfano (ocupa espacio, nadie lo ve). Está acotado por los topes por persona; una limpieza automática periódica se valorará en la Etapa 11.
+- **La foto de la placa QR es pública** (bucket `qr-photos`, solo para quien la elige) y cualquiera que tenga su dirección exacta puede verla; las demás fotos son privadas.
+- **El QR contiene la dirección del sitio** (hoy `…pages.dev`). Si algún día cambia la dirección, los QR impresos hay que reponerlos.
 - Las denuncias se **registran en la plataforma**; la plataforma no las presenta ante ninguna autoridad.
 - Las guías y los aliados de la demostración son **contenido de ejemplo**. Las guías están marcadas «pendiente de revisión veterinaria» y deben revisarse antes de presentarlas como definitivas.
 
@@ -56,21 +75,27 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 ```
 index.html  registro.html  login.html  recuperar.html  nueva-contrasena.html
 guias.html  directorio.html  denuncias.html  planes.html  sobre-nosotros.html
-perfil.html  mascota.html  carnet.html  notificaciones.html  chat.html
-panel-aliado.html  admin.html
+perfil.html  mascota.html  carnet.html  qr.html (página pública de la placa)
+notificaciones.html  chat.html  panel-aliado.html  admin.html
 css/styles.css        estilos compartidos
 js/config.js          URL y clave publishable de Supabase (públicas; NUNCA la secret)
-js/tp-client.js       cliente de Supabase Auth/REST sin dependencias (Etapa 3)
-js/tp-ui.js           ayudas de formularios (mensajes, botones ocupados)
+js/tp-client.js       cliente de Supabase Auth/REST/Storage sin dependencias (Etapas 3 y 4)
+js/tp-ui.js           ayudas de formularios, fechas en español y construcción segura de elementos
+js/media.js           reduce y recodifica imágenes a JPEG (quita EXIF/GPS) antes de subirlas
+js/qr.js              generador de códigos QR propio (sin servicios externos)
+js/tp-pets.js         ayudas compartidas de mascotas, fotos firmadas y planes
 js/guard.js           protección de páginas privadas por rol
 js/layout.js          cabecera (según sesión), pie y avisos compartidos
-js/pages/             lógica de registro, login, recuperar, nueva-contraseña y perfil
+js/pages/             lógica de cada página: registro, login, recuperar, nueva-contraseña, perfil,
+                      mascota, carnet, placa (en carnet.html) y qr-publico
 js/plans.js           planes y selector mensual/anual
 _headers              cabeceras HTTP y CSP (Cloudflare Pages)
 .env.example          solo para claves secretas futuras (Edge Functions)
 GUIA_ETAPA_3.md       pasos manuales de la Etapa 3 y lista de pruebas en tu sitio
+GUIA_ETAPA_4.md       pasos manuales de la Etapa 4 y lista de pruebas en tu sitio
 database/             Etapa 2: SQL de la base de datos (ver abajo)
-pruebas-web/          Etapa 3: pruebas de navegador con simulador de Supabase (solo desarrollo)
+pruebas-web/          pruebas de navegador con simuladores de Supabase (solo desarrollo):
+                      probar_acceso.py (Etapa 3), probar_mascotas.py y probar_qr.py (Etapa 4)
 ```
 
 ### Carpeta `database/`
@@ -81,7 +106,7 @@ pruebas-web/          Etapa 3: pruebas de navegador con simulador de Supabase (s
 | `00_instalar_todo.sql` | Todo junto (01 a 05) para pegarlo de una vez. Se puede ejecutar varias veces |
 | `01_esquema.sql` … `05_datos_base.sql` | Las partes: tablas · funciones · permisos (RLS) · archivos · planes |
 | `06_datos_demo.sql` | Opcional: 6 aliados ficticios y 8 guías generales de ejemplo |
-| `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (31 comprobaciones) |
+| `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (32 comprobaciones) |
 | `construir_instalador.sh` | Regenera `00_instalar_todo.sql` si editas 01–05 |
 | `pruebas/` | Batería de pruebas y simulador de Supabase (solo para desarrollo local) |
 
@@ -91,7 +116,7 @@ Todas las rutas son relativas.
 
 Desde la Etapa 3 hay que servir la carpeta (con doble clic en el archivo no funcionan las sesiones): `python3 -m http.server 8000` y entra a `http://localhost:8000`. Para que los correos de confirmación regresen ahí, añade `http://localhost:8000/**` en *Authentication → URL Configuration → Redirect URLs* (Paso 2 de `GUIA_ETAPA_3.md`).
 
-**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3) y `bash database/pruebas/ejecutar_pruebas.sh` (Etapa 2, requiere PostgreSQL).
+**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
 
 ## Publicar esta etapa (opcional, gratis)
 
@@ -128,6 +153,14 @@ Consecuencias para el diseño:
 7. **Fotos de denuncias:** se suben mediante una función segura en la Etapa 6 (no hay subida directa desde el navegador).
 8. **Datos de demostración:** hay que revisarlos y borrarlos antes de abrir el sitio al público (`delete from public.businesses where is_demo;`).
 
-## Siguiente: Etapa 4 (mascotas, carnet, QR y fotos)
+## Decisiones de la Etapa 4 que conviene confirmar
 
-Conectar `mascota.html`, `carnet.html` y la foto de perfil: fichas de mascotas (máx. 30 por cuenta), carnet de salud según plan, subida de fotos a Supabase Storage (JPG/PNG/WebP con los topes de la Etapa 2) y placa QR con token aleatorio para Huellita VIP. Antes, completa y prueba la Etapa 3 con `GUIA_ETAPA_3.md`.
+1. **Foto de la placa QR pública y separada.** Para que quien encuentre a la mascota pueda ver su foto sin iniciar sesión, la foto que *tú eliges* para la placa se guarda en un bucket público aparte (`qr-photos`, máx. 30 archivos de 1 MB por cuenta, solo con Huellita VIP). La foto de la ficha de la mascota sigue privada.
+2. **La placa solo muestra lo que activas.** Por omisión: nombre y raza visibles, teléfono y foto apagados. El teléfono solo se publica si lo escribes y lo autorizas.
+3. **Una placa ya creada sobrevive al vencimiento del plan** (se puede seguir editando su texto), pero sin VIP no se pueden crear placas nuevas ni subir fotos nuevas para la placa.
+4. **El carnet usa hora de Ciudad de México** (UTC−6 fijo, sin horario de verano desde 2022).
+5. **Sin recordatorios todavía** (ver «No terminado»).
+
+## Siguiente: Etapa 5 (directorio y panel de aliados)
+
+Conectar `directorio.html` y `panel-aliado.html`: alta del negocio (queda «pendiente de aprobación»), logotipo y fotos en `business-media`, ficha según el plan del aliado (Plata/Oro) y enlaces directos a Google Maps, sin API de pago. Antes, completa y prueba la Etapa 4 con `GUIA_ETAPA_4.md`.

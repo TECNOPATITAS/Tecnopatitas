@@ -316,12 +316,27 @@ begin
   if v_owner is null then
     raise exception 'Mascota no encontrada.' using errcode = '23503';
   end if;
-  select * into v_plan from private.plan_for(v_owner);
-  if not found or not v_plan.qr_enabled then
-    raise exception 'Tu plan no incluye la placa QR. Está disponible en Huellita VIP.' using errcode = 'P0001';
+  -- El plan solo se exige para CREAR la placa: una placa ya creada se conserva aunque el plan venza.
+  if tg_op = 'INSERT' then
+    select * into v_plan from private.plan_for(v_owner);
+    if not found or not v_plan.qr_enabled then
+      raise exception 'Tu plan no incluye la placa QR. Está disponible en Huellita VIP.' using errcode = 'P0001';
+    end if;
+  end if;
+  -- La foto pública debe ser un archivo de la carpeta del dueño (sin rutas con «..» ni subcarpetas).
+  if new.qr_photo_path is not null
+     and (new.qr_photo_path !~ ('^' || v_owner::text || '/[A-Za-z0-9._-]{1,120}$') or new.qr_photo_path like '%..%') then
+    raise exception 'La foto de la placa no es válida.' using errcode = '23514';
   end if;
   return new;
 end;
+$$;
+
+-- ¿El plan vigente de quien llama incluye la placa QR? (lo usa la política de subida a qr-photos)
+create or replace function public.has_qr_plan()
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select coalesce((select pl.qr_enabled from private.plan_for((select auth.uid())) pl), false);
 $$;
 
 -- El plan debe corresponder al tipo de cuenta (dueños ↔ planes de dueños, etc.).
@@ -509,7 +524,7 @@ drop trigger if exists tp_guard on public.pet_appointments;
 create trigger tp_guard before insert on public.pet_appointments for each row execute function private.guard_health_card();
 
 drop trigger if exists tp_guard on public.pet_qr_profiles;
-create trigger tp_guard before insert on public.pet_qr_profiles for each row execute function private.guard_qr();
+create trigger tp_guard before insert or update of qr_photo_path, pet_id on public.pet_qr_profiles for each row execute function private.guard_qr();
 
 drop trigger if exists tp_guard on public.subscriptions;
 create trigger tp_guard before insert or update of plan_id, user_id on public.subscriptions for each row execute function private.guard_subscription();
@@ -619,7 +634,7 @@ as $$
     'name',          case when q.show_name  then p.name end,
     'species',       p.species,
     'breed',         case when q.show_breed then p.breed end,
-    'photo_path',    case when q.show_photo then p.photo_path end,
+    'photo_path',    case when q.show_photo then q.qr_photo_path end,
     'message',       q.public_message,
     'contact_name',  case when q.show_phone then q.contact_name end,
     'contact_phone', case when q.show_phone then q.contact_phone end)

@@ -26,7 +26,7 @@ exp_auth_fn as (select unnest(array[
   'admin_assign_subscription','admin_cancel_subscription','admin_dashboard_stats','admin_list_users','admin_renew_subscription',
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
   'cancel_my_subscription','directory_get','directory_search','get_public_pet_profile','is_active_user','is_admin',
-  'is_business_account','my_entitlements','regenerate_pet_qr_token','storage_has_room','submit_complaint','track_complaint']) as f),
+  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','storage_has_room','submit_complaint','track_complaint']) as f),
 checks(n, grupo, comprobacion, ok, detalle) as (values
   -- ---------------- Estructura ----------------
   (10, 'Estructura', 'Existen las 18 tablas de la plataforma en "public"',
@@ -141,19 +141,24 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
       like '%conversations%messages%notifications%', (select string_agg(tablename, ',' order by tablename) from pg_publication_tables where pubname = 'supabase_realtime')),
 
   -- ---------------- Almacenamiento ----------------
-  (60, 'Almacenamiento', 'Los 5 buckets existen con visibilidad y tamaño máximo correctos',
-    coalesce((select string_agg(id || ':' || public || ':' || file_size_limit, ',' order by id) from storage.buckets where id in ('avatars','pet-photos','business-media','guide-images','complaint-evidence')), '')
-      = 'avatars:false:2097152,business-media:true:5242880,complaint-evidence:false:5242880,guide-images:true:5242880,pet-photos:false:5242880',
+  (60, 'Almacenamiento', 'Los 6 buckets existen con visibilidad y tamaño máximo correctos',
+    coalesce((select string_agg(id || ':' || public || ':' || file_size_limit, ',' order by id) from storage.buckets where id in ('avatars','pet-photos','business-media','guide-images','complaint-evidence','qr-photos')), '')
+      = 'avatars:false:2097152,business-media:true:5242880,complaint-evidence:false:5242880,guide-images:true:5242880,pet-photos:false:5242880,qr-photos:true:1048576',
     (select string_agg(id || ':' || public || ':' || coalesce(file_size_limit::text, 'sin tope'), ',' order by id) from storage.buckets)),
   (61, 'Almacenamiento', 'Solo se aceptan imágenes JPG, PNG o WebP',
-    (select count(*) from storage.buckets where id in ('avatars','pet-photos','business-media','guide-images','complaint-evidence')
-        and allowed_mime_types is not distinct from array['image/jpeg','image/png','image/webp']) = 5, null),
-  (62, 'Almacenamiento', 'Existen las 15 políticas de almacenamiento de TECNOPATITAS',
-    (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'tp\_%') = 15,
-    (select count(*)::text || ' de 15' from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'tp\_%')),
+    (select count(*) from storage.buckets where id in ('avatars','pet-photos','business-media','guide-images','complaint-evidence','qr-photos')
+        and allowed_mime_types is not distinct from array['image/jpeg','image/png','image/webp']) = 6, null),
+  (62, 'Almacenamiento', 'Existen las 19 políticas de almacenamiento de TECNOPATITAS',
+    (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'tp\_%') = 19,
+    (select count(*)::text || ' de 19' from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'tp\_%')),
   (63, 'Almacenamiento', 'No hay políticas de almacenamiento ajenas (p. ej. creadas desde el panel por accidente)',
     not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname not like 'tp\_%'),
     (select string_agg(policyname, ', ') from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname not like 'tp\_%')),
+
+  (64, 'Almacenamiento', 'La placa QR valida la foto pública (columna y disparador al insertar y al actualizar)',
+    exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'pet_qr_profiles' and column_name = 'qr_photo_path')
+    and exists (select 1 from pg_trigger t where t.tgrelid = 'public.pet_qr_profiles'::regclass and t.tgname = 'tp_guard' and not t.tgisinternal
+                  and (t.tgtype & 2) = 2 and (t.tgtype & 4) = 4 and (t.tgtype & 16) = 16), null),
 
   -- ---------------- Informativo ----------------
   (90, 'INFO', 'Administradores registrados en admin_roles (debe haber al menos 1 después de crear el tuyo)',

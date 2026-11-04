@@ -109,8 +109,8 @@ grant update (product_name, kind, applied_on, next_due_on, notes) on public.pet_
 grant insert (pet_id, kind, scheduled_at, status, clinic, reason, notes) on public.pet_appointments to authenticated;
 grant update (kind, scheduled_at, status, clinic, reason, notes) on public.pet_appointments to authenticated;
 -- public_token NO está en la lista: nadie elige su propio token (se genera en el servidor).
-grant insert (pet_id, is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone) on public.pet_qr_profiles to authenticated;
-grant update (is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone) on public.pet_qr_profiles to authenticated;
+grant insert (pet_id, is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone, qr_photo_path) on public.pet_qr_profiles to authenticated;
+grant update (is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone, qr_photo_path) on public.pet_qr_profiles to authenticated;
 
 do $$
 declare t text;
@@ -272,6 +272,7 @@ grant execute on function public.my_entitlements() to authenticated;
 grant execute on function public.cancel_my_subscription() to authenticated;
 grant execute on function public.regenerate_pet_qr_token(uuid) to authenticated;
 grant execute on function public.storage_has_room(text, integer) to authenticated;
+grant execute on function public.has_qr_plan() to authenticated;
 
 -- Administración (cada función vuelve a comprobar is_admin() en el servidor).
 grant execute on function public.admin_dashboard_stats() to authenticated;

@@ -180,6 +180,10 @@ create table if not exists public.pet_qr_profiles (
   updated_at     timestamptz not null default now(),
   check (not show_phone or contact_phone is not null)
 );
+-- Etapa 4: foto pública de la placa. La foto de la mascota vive en un bucket PRIVADO; para mostrarla a quien
+-- escanee la placa, la persona sube a propósito una copia a un bucket público (qr-photos) y la elige aquí.
+alter table public.pet_qr_profiles add column if not exists qr_photo_path text
+  check (qr_photo_path is null or char_length(qr_photo_path) <= 300);
 
 -- ---------------------------------------------------------------------
 -- Establecimientos aliados y promociones

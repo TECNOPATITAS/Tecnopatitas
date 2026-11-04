@@ -249,6 +249,37 @@ select t.eq('El token anterior deja de funcionar', null, 'anon',
 select t.eq('Un token mal formado devuelve nada (sin error)', null, 'anon', $q$select (public.get_public_pet_profile('abc') is null)::text$q$, 'true');
 select t.eq('Un intento de inyección SQL en el token devuelve nada', null, 'anon',
   $q$select (public.get_public_pet_profile($x$' or '1'='1$x$) is null)::text$q$, 'true');
+-- Etapa 4: foto pública de la placa
+select t.ex('A elige una foto pública de SU carpeta', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{A}/foto1.jpg' where pet_id = '{P1}'$q$, 'OK rows=1');
+select t.ex('A NO puede apuntar la foto a la carpeta de B', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{B}/foto1.jpg' where pet_id = '{P1}'$q$, 'ERR 23514%');
+select t.ex('La ruta de la foto no admite «..» para salirse de la carpeta', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{A}/../{B}/foto1.jpg' where pet_id = '{P1}'$q$, 'ERR 23514%');
+select t.ex('La ruta de la foto no admite «..» como nombre de archivo', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{A}/..' where pet_id = '{P1}'$q$, 'ERR 23514%');
+select t.ex('La ruta de la foto no admite subcarpetas', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{A}/x/foto1.jpg' where pet_id = '{P1}'$q$, 'ERR 23514%');
+select t.ex('B NO puede cambiar la foto pública de la placa de A', '{B}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{B}/foto1.jpg' where pet_id = '{P1}'$q$, 'OK rows=0');
+select t.eq('Con show_photo apagado el público NO ve la foto', null, 'anon',
+  format($q$select public.get_public_pet_profile(%L) ->> 'photo_path'$q$, (select public_token from public.pet_qr_profiles where pet_id = '{P1}')), '<null>');
+select t.ex('A decide mostrar la foto', '{A}', 'authenticated', $q$update public.pet_qr_profiles set show_photo = true where pet_id = '{P1}'$q$, 'OK rows=1');
+select t.eq('Con show_photo encendido el público ve SOLO la foto pública elegida', null, 'anon',
+  format($q$select public.get_public_pet_profile(%L) ->> 'photo_path'$q$, (select public_token from public.pet_qr_profiles where pet_id = '{P1}')), '{A}/foto1.jpg');
+select t.eq('La foto privada de la mascota nunca aparece en el perfil público', null, 'service_role',
+  format($q$select (public.get_public_pet_profile(%L)::text like '%%pet-photos%%')::text$q$, (select public_token from public.pet_qr_profiles where pet_id = '{P1}')), 'false');
+select t.eq('has_qr_plan: VIP = true', '{A}', 'authenticated', $q$select public.has_qr_plan()::text$q$, 'true');
+select t.eq('has_qr_plan: Básica = false', '{B}', 'authenticated', $q$select public.has_qr_plan()::text$q$, 'false');
+select t.ex('Un anónimo NO puede ejecutar has_qr_plan', null, 'anon', $q$select public.has_qr_plan()$q$, 'ERR 42501%');
+-- Si el plan vence, la placa existente se conserva y se puede seguir editando, pero no se crean placas nuevas
+select t.ex('D cancela el plan de A', '{D}', 'authenticated', $q$select public.admin_cancel_subscription('{A}', 'prueba de vencimiento')$q$, 'OK rows=1');
+select t.ex('Plan vencido: la placa ya creada se puede seguir editando', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set public_message = 'Sigo aquí' where pet_id = '{P1}'$q$, 'OK rows=1');
+select t.ex('Plan vencido: se puede cambiar la foto pública (sin exigir el plan)', '{A}', 'authenticated',
+  $q$update public.pet_qr_profiles set qr_photo_path = '{A}/foto2.jpg' where pet_id = '{P1}'$q$, 'OK rows=1');
+select t.ex('Plan vencido: NO se crea una placa nueva', '{A}', 'authenticated', $q$insert into public.pet_qr_profiles (pet_id) values ('{P3}')$q$, 'ERR P0001%no incluye la placa QR%');
+select t.ex('D vuelve a asignar VIP a A', '{D}', 'authenticated', $q$select public.admin_assign_subscription('{A}', 'vip')$q$, 'OK rows=1');
 select t.ex('Un anónimo NO puede leer la tabla de placas', null, 'anon', $q$select * from public.pet_qr_profiles$q$, 'ERR 42501%');
 select t.eq('B no ve las placas de A', '{B}', 'authenticated', $q$select count(*) from public.pet_qr_profiles$q$, '0');
 select t.ex('A borra la mascota Michi: se borra su carnet en cascada', '{A}', 'authenticated', $q$delete from public.pets where id = '{P2}'$q$, 'OK rows=1');
@@ -510,9 +541,9 @@ delete from public.care_guides where slug = 'borrador-secreto';
 -- =====================================================================
 select t.grupo('9 Almacenamiento de archivos');
 -- =====================================================================
-select t.eq('Los 5 buckets tienen visibilidad y tope de tamaño correctos', null, 'service_role',
+select t.eq('Los 6 buckets tienen visibilidad y tope de tamaño correctos', null, 'service_role',
   $q$select string_agg(id || ':' || public || ':' || file_size_limit, ',' order by id) from storage.buckets$q$,
-  'avatars:false:2097152,business-media:true:5242880,complaint-evidence:false:5242880,guide-images:true:5242880,pet-photos:false:5242880');
+  'avatars:false:2097152,business-media:true:5242880,complaint-evidence:false:5242880,guide-images:true:5242880,pet-photos:false:5242880,qr-photos:true:1048576');
 select t.eq('Solo se aceptan imágenes JPG, PNG o WebP', null, 'service_role',
   $q$select count(*) from storage.buckets where allowed_mime_types <> array['image/jpeg','image/png','image/webp']$q$, '0');
 select t.ex('A sube su foto de perfil a su carpeta', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('avatars', '{A}/yo.png')$q$, 'OK rows=1');
@@ -525,6 +556,22 @@ select t.ex('A NO puede borrar la foto de otra persona', '{B}', 'authenticated',
 select t.ex('A sube una 2.ª foto', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('avatars', '{A}/2.png')$q$, 'OK rows=1');
 select t.ex('A sube una 3.ª foto', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('avatars', '{A}/3.png')$q$, 'OK rows=1');
 select t.ex('Tope de archivos por persona: la 4.ª se rechaza', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('avatars', '{A}/4.png')$q$, 'ERR 42501%');
+-- Etapa 4: bucket público de fotos de placas QR
+select t.eq('qr-photos es público (lectura por URL), pero escribirlo exige sesión y plan', null, 'service_role', $q$select public::text from storage.buckets where id = 'qr-photos'$q$, 'true');
+select t.eq('has_qr_plan: A con VIP = true', '{A}', 'authenticated', $q$select public.has_qr_plan()::text$q$, 'true');
+select t.ex('A (VIP) sube la foto de su placa a su carpeta', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('qr-photos', '{A}/foto1.jpg')$q$, 'OK rows=1');
+select t.ex('A NO puede subir a la carpeta de B en qr-photos', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('qr-photos', '{B}/foto1.jpg')$q$, 'ERR 42501%');
+select t.ex('Un anónimo NO puede subir a qr-photos', null, 'anon', $q$insert into storage.objects (bucket_id, name) values ('qr-photos', '{A}/anon.jpg')$q$, 'ERR 42501%');
+select t.ex('F (plan Básica) NO puede subir a qr-photos', '{F}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('qr-photos', '{F}/foto1.jpg')$q$, 'ERR 42501%');
+select t.eq('B no ve en la API los archivos de qr-photos de A', '{B}', 'authenticated', $q$select count(*) from storage.objects where bucket_id = 'qr-photos'$q$, '0');
+insert into storage.objects (bucket_id, name, owner) select 'qr-photos', '{A}/relleno' || g, '{A}'::uuid from generate_series(1, 29) g;
+select t.ex('Tope de 30 fotos de placa por persona: la 31.ª se rechaza', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('qr-photos', '{A}/una-mas.jpg')$q$, 'ERR 42501%');
+select t.ex('A puede borrar una foto suya de qr-photos', '{A}', 'authenticated', $q$delete from storage.objects where bucket_id = 'qr-photos' and name = '{A}/relleno1'$q$, 'OK rows=1');
+select t.ex('B NO puede borrar fotos de A en qr-photos', '{B}', 'authenticated', $q$delete from storage.objects where bucket_id = 'qr-photos'$q$, 'OK rows=0');
+select t.ex('D cancela el plan de A (storage)', '{D}', 'authenticated', $q$select public.admin_cancel_subscription('{A}', 'prueba storage')$q$, 'OK rows=1');
+select t.eq('Sin plan: has_qr_plan = false', '{A}', 'authenticated', $q$select public.has_qr_plan()::text$q$, 'false');
+select t.ex('Sin plan: NO se pueden subir más fotos de placa', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('qr-photos', '{A}/tras-vencer.jpg')$q$, 'ERR 42501%');
+select t.ex('Sin plan: sí puede borrar las que ya tenía (limpiar)', '{A}', 'authenticated', $q$delete from storage.objects where bucket_id = 'qr-photos' and name = '{A}/relleno2'$q$, 'OK rows=1');
 select t.ex('A sube foto de mascota a su carpeta', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('pet-photos', '{A}/{P1}/luna.webp')$q$, 'OK rows=1');
 select t.ex('A NO puede subir imágenes de guías', '{A}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('guide-images', 'x/portada.png')$q$, 'ERR 42501%');
 select t.ex('D (admin) sí sube imágenes de guías', '{D}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('guide-images', 'perros/portada.png')$q$, 'OK rows=1');

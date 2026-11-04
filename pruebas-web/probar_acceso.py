@@ -46,7 +46,8 @@ def sb_handler(route):
     req = route.request
     if req.method == 'OPTIONS':
         route.fulfill(status=204, headers=CORS); return
-    status, data = be.handle(req.method, req.url, req.headers, req.post_data)
+    raw = req.post_data_buffer
+    status, data = be.handle(req.method, req.url, req.headers, req.post_data if req.post_data is not None else (raw.decode('utf-8', 'replace') if raw else None))
     fulfill_cors(route, status, data)
 
 def new_ctx(browser):
@@ -235,7 +236,7 @@ with sync_playwright() as pw:
     xss = '<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>'
     be.add_user('x@ejemplo.mx', 'ClaveXss12345', 'owner', xss, phone='55 1234 5678')
     pg.goto(f'{ORIGIN}/login.html'); fill_login(pg, 'x@ejemplo.mx', 'ClaveXss12345'); pg.wait_for_url(re.compile(r'perfil\.html')); pg.wait_for_selector('body.tp-ok')
-    check('Un nombre con HTML/script se muestra como TEXTO y no se ejecuta', pg.evaluate("window.__xss") is None and pg.locator('main img').count() == 0 and pg.input_value('#p-nombre') == xss)
+    check('Un nombre con HTML/script se muestra como TEXTO y no se ejecuta', pg.evaluate("window.__xss") is None and pg.locator('main img[src="x"]').count() == 0 and pg.locator('main script').count() == 0 and pg.input_value('#p-nombre') == xss)
     ctx.close()
 
     # ================= 6. Perfil =================

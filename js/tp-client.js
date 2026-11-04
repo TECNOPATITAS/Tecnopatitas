@@ -4,6 +4,7 @@
   Cliente mínimo y auditable (sin librerías de terceros) para:
     · Supabase Auth (GoTrue): registro, inicio de sesión, cierre, recuperación y cambio de contraseña
     · Base de datos (PostgREST): consultas y funciones RPC con la sesión de la persona
+    · Almacenamiento (Storage): subir, firmar y borrar imágenes (Etapa 4)
 
   Reglas de seguridad:
     · Solo usa la clave pública (publishable). Se niega a arrancar si detecta una clave secreta.
@@ -52,11 +53,19 @@ const MESSAGES = {
   captcha_failed: 'No se pudo comprobar que eres una persona. Inténtalo de nuevo.',
   session_expired: 'Tu sesión expiró. Inicia sesión de nuevo.',
   forbidden: 'No tienes permiso para hacer esto.',
-  not_saved: 'No se pudo guardar. Si tu cuenta está suspendida, contacta al administrador.'
+  not_saved: 'No se pudo guardar. Si tu cuenta está suspendida, contacta al administrador.',
+  file_too_large: 'La imagen es demasiado grande para el servidor.',
+  bad_file_type: 'Ese tipo de archivo no está permitido. Usa una imagen JPG, PNG o WebP.',
+  storage_denied: 'No se pudo subir la imagen. Revisa que tu cuenta no esté suspendida, que tu plan lo permita y que no hayas llegado al límite de archivos.',
+  '23514': 'Algún dato no cumple las reglas (revisa fechas, longitudes y valores).',
+  '23503': 'No se encontró el registro relacionado. Recarga la página e inténtalo de nuevo.',
+  '23505': 'Ya existe un registro igual.',
+  '42501': 'No tienes permiso para hacer esto. Si tu cuenta está suspendida, contacta al administrador.'
 };
 function errorMessage(e) {
   if (!e) return MESSAGES.network;
   const code = e.code || '';
+  if (code === 'P0001' && e.message && e.message.length < 200) return e.message;   // mensajes en español de nuestros disparadores (límites de plan, etc.)
   if (MESSAGES[code]) return MESSAGES[code];
   if (e.status === 429) return MESSAGES.over_request_rate_limit;
   if (e.status === 401) return MESSAGES.session_expired;
@@ -92,16 +101,17 @@ window.addEventListener('storage', e => { if (e.key === STORE_KEY) { cache = nul
 async function http(path, { method = 'GET', query, body, token, headers, signal } = {}) {
   if (configError) throw new TPError('config', configError);
   const url = BASE + path + (query ? '?' + query : '');
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;   // subida de archivos: el navegador pone el Content-Type con su «boundary»
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 20000);
+  const timer = setTimeout(() => ctl.abort(), isForm ? 60000 : 20000);
   let res;
   try {
     res = await fetch(url, {
       method, credentials: 'omit', cache: 'no-store', signal: signal || ctl.signal,
       headers: Object.assign({ apikey: KEY, Accept: 'application/json' },
-        body !== undefined ? { 'Content-Type': 'application/json' } : {},
+        body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : {},
         token ? { Authorization: 'Bearer ' + token } : {}, headers || {}),
-      body: body !== undefined ? JSON.stringify(body) : undefined
+      body: body !== undefined ? (isForm ? body : JSON.stringify(body)) : undefined
     });
   } catch (e) {
     throw new TPError('network', 'network', 0, e);
@@ -213,19 +223,77 @@ async function updatePassword(newPassword) {
 }
 
 // ---------- Base de datos (PostgREST) ----------
-async function rest(path, { method = 'GET', query, body, prefer, single } = {}) {
+async function authed(fullPath, opts) {                       // petición con la sesión (si hay); un 401 cierra la sesión
+  if (opts && opts.anon) { const o = Object.assign({}, opts); delete o.anon; return http(fullPath, o); }   // anon: nunca envía la sesión (páginas públicas)
   const s = await getSession();
-  const headers = {};
-  if (prefer) headers.Prefer = prefer;
-  if (single) headers.Accept = 'application/vnd.pgrst.object+json';
   try {
-    return await http('/rest/v1' + path, { method, query, body, token: s && s.access_token, headers });
+    return await http(fullPath, Object.assign({}, opts, { token: s && s.access_token }));
   } catch (e) {
     if (e.status === 401 && s) { writeSession(null); cache = null; emit('SIGNED_OUT'); throw new TPError('session_expired', 'session_expired', 401); }
     throw e;
   }
 }
-const rpc = (fn, args) => rest('/rpc/' + encodeURIComponent(fn), { method: 'POST', body: args || {} });
+async function rest(path, { method = 'GET', query, body, prefer, single, anon } = {}) {
+  const headers = {};
+  if (prefer) headers.Prefer = prefer;
+  if (single) headers.Accept = 'application/vnd.pgrst.object+json';
+  return authed('/rest/v1' + path, { method, query, body, headers, anon });
+}
+const rpc = (fn, args, opts) => rest('/rpc/' + encodeURIComponent(fn), { method: 'POST', body: args || {}, anon: !!(opts && opts.anon) });
+
+// ---------- Archivos (Supabase Storage) ----------
+// Buckets: avatars y pet-photos son PRIVADOS (se ven con URL firmada temporal); qr-photos es público por diseño (la foto que
+// la persona decide mostrar en su placa). Las rutas válidas son <id-de-usuario>/<nombre-de-archivo>.
+const BUCKETS = ['avatars', 'pet-photos', 'qr-photos'];
+const PATH_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9._-]{1,120}$/;
+function checkPath(bucket, path) {
+  if (!BUCKETS.includes(bucket) || typeof path !== 'string' || !PATH_RE.test(path) || path.includes('..')) throw new TPError('bad_path', 'Ruta de archivo no válida.');
+}
+function storageError(e) {                                    // traduce los errores de Storage a códigos propios
+  if (!(e instanceof TPError) || e.code === 'session_expired' || e.code === 'network') return e;
+  if (e.status === 413) return new TPError('file_too_large', e.message, 413, e.raw);
+  if (e.status === 415) return new TPError('bad_file_type', e.message, 415, e.raw);
+  if (e.status === 400 || e.status === 403) return new TPError('storage_denied', e.message, e.status, e.raw);
+  return e;
+}
+const storage = {
+  async upload(bucket, path, blob) {
+    checkPath(bucket, path);
+    if (!(blob instanceof Blob) || !/^image\/(jpeg|png|webp)$/.test(blob.type)) throw new TPError('bad_file_type', 'Tipo de archivo no permitido.');
+    const fd = new FormData();                                // igual que el SDK oficial de Supabase en el navegador
+    fd.append('cacheControl', '3600');
+    fd.append('', blob, 'imagen.jpg');
+    try { await authed('/storage/v1/object/' + bucket + '/' + path, { method: 'POST', body: fd }); }
+    catch (e) { throw storageError(e); }
+    return path;
+  },
+  async remove(bucket, paths) {                               // los errores no son críticos: el llamador decide
+    paths.forEach(p => checkPath(bucket, p));
+    if (!paths.length) return;
+    try { await authed('/storage/v1/object/' + bucket, { method: 'DELETE', body: { prefixes: paths } }); }
+    catch (e) { throw storageError(e); }
+  },
+  async sign(bucket, paths, expiresIn) {                      // → { ruta: urlFirmada | null }
+    const out = {};
+    const ok = (paths || []).filter(p => { try { checkPath(bucket, p); return true; } catch { return false; } });
+    if (!ok.length) return out;
+    let r;
+    try { r = await authed('/storage/v1/object/sign/' + bucket, { method: 'POST', body: { expiresIn: expiresIn || 3600, paths: ok } }); }
+    catch (e) { throw storageError(e); }
+    (Array.isArray(r) ? r : []).forEach(it => {
+      if (it && it.path && it.signedURL && !it.error) {
+        const u = String(it.signedURL);
+        out[it.path] = BASE + (u.startsWith('/storage/v1') ? '' : '/storage/v1') + (u.startsWith('/') ? u : '/' + u);
+      }
+    });
+    return out;
+  },
+  publicUrl(bucket, path) {                                   // solo para buckets públicos (qr-photos)
+    if (bucket !== 'qr-photos') return null;
+    try { checkPath(bucket, path); } catch { return null; }
+    return BASE + '/storage/v1/object/public/' + bucket + '/' + path;
+  }
+};
 
 // ---------- Perfil y rol ----------
 let meInflight = null;                                        // evita pedir lo mismo dos veces cuando cabecera y guarda lo piden a la vez
@@ -242,7 +310,7 @@ async function loadMe() {
   const uid = s.user && s.user.id;
   if (!uid) { await signOut(); return null; }
   const [prof, adm] = await Promise.all([
-    rest('/profiles', { query: 'select=id,display_name,account_type,phone,is_suspended,created_at&id=eq.' + encodeURIComponent(uid), single: true })
+    rest('/profiles', { query: 'select=id,display_name,account_type,avatar_path,phone,is_suspended,created_at&id=eq.' + encodeURIComponent(uid), single: true })
       .catch(e => { if (e.status === 406 || e.code === 'PGRST116') return null; throw e; }),
     rpc('is_admin').then(v => v === true).catch(e => { if (e.status === 401) throw e; return false; })
   ]);
@@ -283,7 +351,7 @@ const checkEmail = e => (typeof e === 'string' && e.length <= 254 && EMAIL_RE.te
 
 window.TP = Object.freeze({
   ready, callback, onAuthChange, hasSession, getSession, me, homeFor, safeNext, errorMessage, TPError,
-  signUp, signIn, signOut, resetPassword, updatePassword, updateProfile, rest, rpc,
+  signUp, signIn, signOut, resetPassword, updatePassword, updateProfile, rest, rpc, storage,
   checkPassword, checkEmail, configError
 });
 })();

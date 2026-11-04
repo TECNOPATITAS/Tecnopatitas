@@ -183,6 +183,10 @@ create table if not exists public.pet_qr_profiles (
   updated_at     timestamptz not null default now(),
   check (not show_phone or contact_phone is not null)
 );
+-- Etapa 4: foto pública de la placa. La foto de la mascota vive en un bucket PRIVADO; para mostrarla a quien
+-- escanee la placa, la persona sube a propósito una copia a un bucket público (qr-photos) y la elige aquí.
+alter table public.pet_qr_profiles add column if not exists qr_photo_path text
+  check (qr_photo_path is null or char_length(qr_photo_path) <= 300);
 
 -- ---------------------------------------------------------------------
 -- Establecimientos aliados y promociones
@@ -674,12 +678,27 @@ begin
   if v_owner is null then
     raise exception 'Mascota no encontrada.' using errcode = '23503';
   end if;
-  select * into v_plan from private.plan_for(v_owner);
-  if not found or not v_plan.qr_enabled then
-    raise exception 'Tu plan no incluye la placa QR. Está disponible en Huellita VIP.' using errcode = 'P0001';
+  -- El plan solo se exige para CREAR la placa: una placa ya creada se conserva aunque el plan venza.
+  if tg_op = 'INSERT' then
+    select * into v_plan from private.plan_for(v_owner);
+    if not found or not v_plan.qr_enabled then
+      raise exception 'Tu plan no incluye la placa QR. Está disponible en Huellita VIP.' using errcode = 'P0001';
+    end if;
+  end if;
+  -- La foto pública debe ser un archivo de la carpeta del dueño (sin rutas con «..» ni subcarpetas).
+  if new.qr_photo_path is not null
+     and (new.qr_photo_path !~ ('^' || v_owner::text || '/[A-Za-z0-9._-]{1,120}$') or new.qr_photo_path like '%..%') then
+    raise exception 'La foto de la placa no es válida.' using errcode = '23514';
   end if;
   return new;
 end;
+$$;
+
+-- ¿El plan vigente de quien llama incluye la placa QR? (lo usa la política de subida a qr-photos)
+create or replace function public.has_qr_plan()
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select coalesce((select pl.qr_enabled from private.plan_for((select auth.uid())) pl), false);
 $$;
 
 -- El plan debe corresponder al tipo de cuenta (dueños ↔ planes de dueños, etc.).
@@ -867,7 +886,7 @@ drop trigger if exists tp_guard on public.pet_appointments;
 create trigger tp_guard before insert on public.pet_appointments for each row execute function private.guard_health_card();
 
 drop trigger if exists tp_guard on public.pet_qr_profiles;
-create trigger tp_guard before insert on public.pet_qr_profiles for each row execute function private.guard_qr();
+create trigger tp_guard before insert or update of qr_photo_path, pet_id on public.pet_qr_profiles for each row execute function private.guard_qr();
 
 drop trigger if exists tp_guard on public.subscriptions;
 create trigger tp_guard before insert or update of plan_id, user_id on public.subscriptions for each row execute function private.guard_subscription();
@@ -977,7 +996,7 @@ as $$
     'name',          case when q.show_name  then p.name end,
     'species',       p.species,
     'breed',         case when q.show_breed then p.breed end,
-    'photo_path',    case when q.show_photo then p.photo_path end,
+    'photo_path',    case when q.show_photo then q.qr_photo_path end,
     'message',       q.public_message,
     'contact_name',  case when q.show_phone then q.contact_name end,
     'contact_phone', case when q.show_phone then q.contact_phone end)
@@ -1472,8 +1491,8 @@ grant update (product_name, kind, applied_on, next_due_on, notes) on public.pet_
 grant insert (pet_id, kind, scheduled_at, status, clinic, reason, notes) on public.pet_appointments to authenticated;
 grant update (kind, scheduled_at, status, clinic, reason, notes) on public.pet_appointments to authenticated;
 -- public_token NO está en la lista: nadie elige su propio token (se genera en el servidor).
-grant insert (pet_id, is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone) on public.pet_qr_profiles to authenticated;
-grant update (is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone) on public.pet_qr_profiles to authenticated;
+grant insert (pet_id, is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone, qr_photo_path) on public.pet_qr_profiles to authenticated;
+grant update (is_active, show_name, show_photo, show_breed, public_message, contact_name, contact_phone, show_phone, qr_photo_path) on public.pet_qr_profiles to authenticated;
 
 do $$
 declare t text;
@@ -1635,6 +1654,7 @@ grant execute on function public.my_entitlements() to authenticated;
 grant execute on function public.cancel_my_subscription() to authenticated;
 grant execute on function public.regenerate_pet_qr_token(uuid) to authenticated;
 grant execute on function public.storage_has_room(text, integer) to authenticated;
+grant execute on function public.has_qr_plan() to authenticated;
 
 -- Administración (cada función vuelve a comprobar is_admin() en el servidor).
 grant execute on function public.admin_dashboard_stats() to authenticated;
@@ -1678,6 +1698,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
   ('pet-photos',         'pet-photos',         false, 5242880, array['image/jpeg', 'image/png', 'image/webp']),
   ('business-media',     'business-media',     true,  5242880, array['image/jpeg', 'image/png', 'image/webp']),
   ('guide-images',       'guide-images',       true,  5242880, array['image/jpeg', 'image/png', 'image/webp']),
+  ('qr-photos',          'qr-photos',          true,  1048576, array['image/jpeg', 'image/png', 'image/webp']),
   ('complaint-evidence', 'complaint-evidence', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do update
   set public = excluded.public,
@@ -1742,6 +1763,25 @@ select pg_temp.pol('tp_biz_update', $p$
 select pg_temp.pol('tp_biz_delete', $p$
   create policy tp_biz_delete on storage.objects for delete to authenticated
   using (bucket_id = 'business-media' and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin()))) $p$);
+
+-- ---- qr-photos (lectura pública por URL): foto que la persona decide mostrar en su placa QR ----
+-- Solo planes con placa QR pueden subir; máx. 30 archivos de 1 MB. La URL lleva un nombre aleatorio.
+select pg_temp.pol('tp_qr_select', $p$
+  create policy tp_qr_select on storage.objects for select to authenticated
+  using (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text) $p$);
+select pg_temp.pol('tp_qr_insert', $p$
+  create policy tp_qr_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text
+    and (select public.is_active_user())
+    and (select public.has_qr_plan())
+    and (select public.storage_has_room('qr-photos', 30))) $p$);
+select pg_temp.pol('tp_qr_update', $p$
+  create policy tp_qr_update on storage.objects for update to authenticated
+  using (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text) $p$);
+select pg_temp.pol('tp_qr_delete', $p$
+  create policy tp_qr_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text) $p$);
 
 -- ---- guide-images (lectura pública por URL): solo administradores escriben ----
 select pg_temp.pol('tp_guides_admin', $p$

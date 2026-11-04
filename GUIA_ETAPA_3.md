@@ -45,15 +45,34 @@ Supabase trae un servicio de correo de cortesía **solo para probar**, con dos l
 
 Eso significa que **ahora mismo solo tú (y tu equipo) pueden crear cuentas con confirmación por correo**. El sitio muestra mensajes claros en español cuando pasa esto, y **nunca** dice «te enviamos un correo» si el envío falló.
 
-Para que **cualquier persona** pueda registrarse hay tres caminos. **No hace falta decidir hoy** (el sitio funciona igual para probar y para la demostración escolar):
+**Decisión tomada: no hay dominio propio.** Eso descarta a **Resend** (exige un dominio verificado) y a **Brevo** (también pide verificar un dominio y escribir a su soporte para activar el SMTP). Estas son las opciones reales sin dominio, todas gratuitas:
 
-| Opción | Qué implica | Costo |
+| Opción | Qué implica | Para qué sirve |
 |---|---|---|
-| **A. Dejarlo así por ahora** *(recomendada)* | Confirmación de correo activada. Pruebas y demostración con tu correo y los de tu equipo. | Gratis |
-| **B. Apagar «Confirm email»** | Cualquiera se registra al instante, **incluso con un correo que no es suyo**. Además, los correos de «recuperar contraseña» siguen sin llegar a nadie fuera del equipo. No lo recomiendo con personas reales. | Gratis |
-| **C. SMTP propio** | Un proveedor de correo envía los mensajes. **Resend** (gratis: 3,000/mes, 100/día) exige un **dominio propio verificado**; existen otros proveedores con plan gratuito, pero cada uno tiene sus propias condiciones. Se configura en **Authentication → Emails → SMTP Settings**. | Gratis, pero normalmente requiere un dominio (que sí cuesta) |
+| **A. Dejarlo así** | Confirmación de correo activada con el servicio de cortesía. Solo funcionan tu correo y los de tu equipo. | Pruebas y **demostración escolar**. No requiere configurar nada. |
+| **B. Gmail como servicio de correo** *(recomendada si quieres que otras personas se registren)* | Una cuenta de Gmail **solo para el proyecto** envía los correos mediante una «contraseña de aplicación». Hasta unos 500 destinatarios al día (cifra de fuentes secundarias; no pude abrir la página oficial de Google, confírmala en su ayuda). Sin costo y sin tarjeta. | Uso real a pequeña escala. Los correos pueden caer en *spam* y Gmail puede limitar o suspender el envío si hay mucho volumen o quejas. |
+| **C. Apagar «Confirm email»** | Cualquiera se registra al instante, **incluso con un correo que no es suyo**, y «recuperar contraseña» no llega a nadie fuera del equipo. | **No lo recomiendo** con personas reales. |
 
-> **Pregunta que necesito que me contestes:** ¿tienes (o piensas comprar) un dominio propio, por ejemplo `tecnopatitas.mx`? Sin dominio, la opción C se limita a proveedores que no lo exigen, con más restricciones. Esto se resuelve antes de la Etapa 9 (notificaciones y correos) y definitivamente antes de abrir el sitio a personas reales.
+### Cómo hacer la opción B (Gmail), paso a paso
+
+1. **Crea una cuenta de Gmail nueva solo para el proyecto** (por ejemplo `tecnopatitas.app@gmail.com`). Es mejor no usar tu correo personal: si Google limita el envío, no afecta tu cuenta de siempre.
+2. En esa cuenta entra a <https://myaccount.google.com/security> y activa la **Verificación en dos pasos** (sin ella Google no deja crear contraseñas de aplicación).
+3. En el buscador de esa misma página escribe **«Contraseñas de aplicaciones»** (*App passwords*), crea una llamada `supabase` y **copia las 16 letras** que muestra. Solo se ven una vez.
+4. En Supabase: **Authentication → Emails → SMTP Settings → Enable custom SMTP** y llena:
+   - **Sender email:** el Gmail del proyecto
+   - **Sender name:** `TECNOPATITAS`
+   - **Host:** `smtp.gmail.com`
+   - **Port:** `465` (si no funciona, prueba `587`)
+   - **Username:** el mismo Gmail del proyecto
+   - **Password:** las 16 letras del paso 3 (sin espacios)
+5. **Save changes.** Luego, en **Authentication → Rate Limits**, Supabase pone por defecto **30 correos por hora** al activar SMTP propio; para este proyecto alcanza.
+6. Repite las pruebas 3, 5 y 11 del Paso 6 **con un correo que no sea del equipo** (por ejemplo, uno tuyo de Hotmail o de un amigo) y revisa también la carpeta de spam.
+
+> **Seguridad:** la contraseña de aplicación es un secreto. Se escribe **solo** en el panel de Supabase. **No me la pegues aquí ni la subas a GitHub.** Si se filtra, bórrala en la misma página de Google y crea otra.
+>
+> Los correos de Supabase llegan **en inglés** por defecto. Se pueden cambiar a español en **Authentication → Emails → Templates**; si quieres, te preparo las plantillas.
+>
+> Tampoco necesitas resolver esto hoy: con la opción A todo lo demás de la plataforma se puede construir y demostrar. Se vuelve necesario antes de abrir el sitio a personas reales.
 
 ## Paso 5 · Tu cuenta de administrador
 

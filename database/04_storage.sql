@@ -12,6 +12,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
   ('pet-photos',         'pet-photos',         false, 5242880, array['image/jpeg', 'image/png', 'image/webp']),
   ('business-media',     'business-media',     true,  5242880, array['image/jpeg', 'image/png', 'image/webp']),
   ('guide-images',       'guide-images',       true,  5242880, array['image/jpeg', 'image/png', 'image/webp']),
+  ('qr-photos',          'qr-photos',          true,  1048576, array['image/jpeg', 'image/png', 'image/webp']),
   ('complaint-evidence', 'complaint-evidence', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do update
   set public = excluded.public,
@@ -76,6 +77,25 @@ select pg_temp.pol('tp_biz_update', $p$
 select pg_temp.pol('tp_biz_delete', $p$
   create policy tp_biz_delete on storage.objects for delete to authenticated
   using (bucket_id = 'business-media' and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin()))) $p$);
+
+-- ---- qr-photos (lectura pública por URL): foto que la persona decide mostrar en su placa QR ----
+-- Solo planes con placa QR pueden subir; máx. 30 archivos de 1 MB. La URL lleva un nombre aleatorio.
+select pg_temp.pol('tp_qr_select', $p$
+  create policy tp_qr_select on storage.objects for select to authenticated
+  using (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text) $p$);
+select pg_temp.pol('tp_qr_insert', $p$
+  create policy tp_qr_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text
+    and (select public.is_active_user())
+    and (select public.has_qr_plan())
+    and (select public.storage_has_room('qr-photos', 30))) $p$);
+select pg_temp.pol('tp_qr_update', $p$
+  create policy tp_qr_update on storage.objects for update to authenticated
+  using (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text) $p$);
+select pg_temp.pol('tp_qr_delete', $p$
+  create policy tp_qr_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'qr-photos' and (storage.foldername(name))[1] = (select auth.uid())::text) $p$);
 
 -- ---- guide-images (lectura pública por URL): solo administradores escriben ----
 select pg_temp.pol('tp_guides_admin', $p$

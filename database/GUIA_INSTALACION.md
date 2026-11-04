@@ -39,13 +39,13 @@ Para ver el directorio y las guías con contenido de ejemplo, ejecuta igual **`0
 ## Paso 5 · Verificar que quedó seguro
 
 1. **New query**, pega el contenido de **`verificar_seguridad.sql`** y pulsa **Run**.
-2. La primera fila debe decir: **`TODO CORRECTO: 31 comprobaciones superadas`**.
+2. La primera fila debe decir: **`TODO CORRECTO: 32 comprobaciones superadas`**.
 3. Las filas **INFO** son solo datos (número de administradores, demos…). Cualquier fila **REVISAR** significa que algo no coincide: copia la tabla completa y envíamela. Ese resultado **no contiene contraseñas, claves ni datos de usuarios**, así que es seguro compartirlo.
 
 Revisión visual opcional:
 
 - **Table Editor:** deben verse 18 tablas (más las internas del esquema `private` si cambias de esquema), cada una con la etiqueta **RLS enabled**.
-- **Storage:** 5 buckets: `avatars`, `pet-photos`, `business-media`, `guide-images`, `complaint-evidence`. Solo `business-media` y `guide-images` son públicos.
+- **Storage:** 6 buckets: `avatars`, `pet-photos`, `business-media`, `guide-images`, `complaint-evidence` y `qr-photos`. Solo `business-media`, `guide-images` y `qr-photos` son públicos.
 - **Database → Publications → supabase_realtime:** debe incluir `messages`, `conversations` y `notifications`.
 
 ## Paso 6 (puedes dejarlo para la Etapa 3) · Tu cuenta de administrador
@@ -94,7 +94,7 @@ Solo dos datos, ambos **públicos por diseño** (la seguridad la dan las políti
 
 ## Para desarrolladores: ejecutar las pruebas en tu computadora (opcional)
 
-Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 319 pruebas de seguridad y funcionamiento:
+Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 351 pruebas de seguridad y funcionamiento:
 
 ```bash
 bash database/pruebas/ejecutar_pruebas.sh

@@ -32,7 +32,7 @@ class Backend:
         uid = str(uuid.uuid4())
         self.users[email] = dict(id=uid, email=email, password=password, confirmed=confirmed, admin=admin)
         self.profiles[uid] = dict(id=uid, display_name=name, account_type=account_type, phone=phone,
-                                  is_suspended=suspended, created_at='2026-11-04T00:00:00Z')
+                                  is_suspended=suspended, avatar_path=None, created_at='2026-11-04T00:00:00Z')
         return uid
 
     def _session(self, u):
@@ -142,6 +142,6 @@ class Backend:
                     row = self.profiles.get(u['id'])
                     if target != u['id'] or row is None or row['is_suspended']:
                         return ok([])                     # RLS: 0 filas afectadas
-                    row.update({k: v for k, v in (body or {}).items() if k in ('display_name', 'phone')})
+                    row.update({k: v for k, v in (body or {}).items() if k in ('display_name', 'phone', 'avatar_path')})
                     return ok([row])
         return err(404, 'not_found', 'Not found: ' + path)
