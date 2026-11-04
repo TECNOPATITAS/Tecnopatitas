@@ -27,6 +27,8 @@ window.TPUI=Object.freeze({
     kids.flat().forEach(c=>{if(c==null||c===false)return;e.append(c&&c.nodeType?c:document.createTextNode(String(c)))});
     return e;
   },
+  /* Reemplaza el contenido de un elemento. A diferencia de replaceChildren() nativo, ignora null/undefined/false (que se escribirían como el texto «null»). */
+  put(host,...kids){host.replaceChildren(...kids.flat().filter(c=>c!=null&&c!==false))},
   MESES:['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'],
   /* 'AAAA-MM-DD' → '4 nov 2026' (sin convertir zonas horarias) */
   dateEs(d){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d||'');return m?(+m[3])+' '+this.MESES[+m[2]-1]+' '+m[1]:''},
@@ -45,6 +47,9 @@ window.TPUI=Object.freeze({
     const y=Math.floor(months/12),r=months%12;
     return y+(y===1?' año':' años')+(r?' y '+r+(r===1?' mes':' meses'):'');
   },
+  /* Fecha de hoy en Ciudad de México ('AAAA-MM-DD') y suma de días a una fecha ISO (sin zonas horarias) */
+  todayMx(){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())},
+  addDays(iso,n){const [y,m,d]=iso.split('-').map(Number),t=new Date(Date.UTC(y,m-1,d+n));return t.getUTCFullYear()+'-'+String(t.getUTCMonth()+1).padStart(2,'0')+'-'+String(t.getUTCDate()).padStart(2,'0')},
   todayLocal(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')},
   /* A qué página puede ir esta persona según su rol (para respetar ?next= sin mandarla a una pantalla que la rechace). */
   canOpen(page,m){

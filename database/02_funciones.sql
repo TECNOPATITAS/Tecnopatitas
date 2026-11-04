@@ -219,6 +219,24 @@ begin
     end if;
   end if;
 
+  -- Las imágenes del negocio solo pueden estar en la carpeta de su dueño (no se puede apuntar a archivos ajenos).
+  if new.owner_id is not null and (tg_op = 'INSERT' or new.logo_path is distinct from old.logo_path) and new.logo_path is not null
+     and (new.logo_path !~ ('^' || new.owner_id::text || '/[A-Za-z0-9._-]{1,120}$') or new.logo_path like '%..%') then
+    raise exception 'El logotipo no es válido.' using errcode = '23514';
+  end if;
+  if new.owner_id is not null and (tg_op = 'INSERT' or new.photo_paths is distinct from old.photo_paths)
+     and exists (select 1 from unnest(new.photo_paths) x
+                 where x !~ ('^' || new.owner_id::text || '/[A-Za-z0-9._-]{1,120}$') or x like '%..%') then
+    raise exception 'Una de las fotos no es válida.' using errcode = '23514';
+  end if;
+  -- Horario: texto corto por día (p. ej. {"lun": "09:00-18:00", "dom": "Cerrado"}); nada anidado.
+  if (tg_op = 'INSERT' or new.hours is distinct from old.hours) and jsonb_typeof(new.hours) = 'object'
+     and (exists (select 1 from jsonb_each(new.hours) h
+                  where jsonb_typeof(h.value) <> 'string' or char_length(h.key) > 20 or char_length(h.value #>> '{}') > 60)
+          or (select count(*) from jsonb_object_keys(new.hours)) > 10) then
+    raise exception 'El horario no es válido.' using errcode = '23514';
+  end if;
+
   -- El botón de WhatsApp es un beneficio del plan Huellita de Oro.
   if new.whatsapp_url is not null
      and (tg_op = 'INSERT' or new.whatsapp_url is distinct from old.whatsapp_url)
@@ -700,7 +718,7 @@ begin
            b.maps_query,
            case when coalesce(pl.audience = 'business', false) then b.logo_path end,
            case when coalesce(pl.audience = 'business', false) then b.hours else '{}'::jsonb end,
-           b.verified, b.is_demo,
+           (b.verified and coalesce(pl.verified_badge_eligible, false)), b.is_demo,
            coalesce(pl.priority_listing, false),
            coalesce(pl.audience = 'business', false),
            coalesce(pl.audience = 'business', false) and exists (
@@ -709,7 +727,7 @@ begin
                and private.today_mx() between bp.starts_on and bp.ends_on),
            count(*) over ()
     from public.businesses b
-    left join lateral (select x.audience, x.whatsapp_button, x.priority_listing from public.subscription_plans x
+    left join lateral (select x.audience, x.whatsapp_button, x.priority_listing, x.verified_badge_eligible from public.subscription_plans x
                        where x.id = private.effective_plan_id(b.owner_id)) pl on true
     where b.status = 'approved'
       and (p_category is null or b.category = p_category)
@@ -735,7 +753,7 @@ as $$
     'logo_path', case when coalesce(pl.audience = 'business', false) then b.logo_path end,
     'photo_paths', case when coalesce(pl.audience = 'business', false) then to_jsonb(b.photo_paths) else '[]'::jsonb end,
     'hours', case when coalesce(pl.audience = 'business', false) then b.hours else '{}'::jsonb end,
-    'verified', b.verified, 'is_demo', b.is_demo,
+    'verified', (b.verified and coalesce(pl.verified_badge_eligible, false)), 'is_demo', b.is_demo,
     'promotions', case when not coalesce(pl.audience = 'business', false) then '[]'::jsonb else coalesce((
       select jsonb_agg(jsonb_build_object('id', bp.id, 'title', bp.title, 'description', bp.description,
                                           'starts_on', bp.starts_on, 'ends_on', bp.ends_on) order by bp.ends_on)
@@ -743,9 +761,36 @@ as $$
       where bp.business_id = b.id and bp.is_active and private.today_mx() between bp.starts_on and bp.ends_on
     ), '[]'::jsonb) end)
   from public.businesses b
-  left join lateral (select x.audience, x.whatsapp_button from public.subscription_plans x
+  left join lateral (select x.audience, x.whatsapp_button, x.verified_badge_eligible from public.subscription_plans x
                      where x.id = private.effective_plan_id(b.owner_id)) pl on true
   where b.id = p_id and b.status = 'approved';
+$$;
+
+-- Conteo de visitas (Etapa 5): 'view' = alguien abrió la ficha completa; 'map' = tocó «Ver ubicación» o «Cómo llegar».
+-- Solo suma contadores por día. Máximo 1 visita y 3 clics por visitante, establecimiento y día (huella anónima que
+-- cambia a diario; no se guarda la IP). No cuenta las visitas del propio dueño ni de fichas de demostración.
+-- Nunca devuelve error al visitante: si algo no cuadra, simplemente no cuenta.
+create or replace function public.directory_track(p_id uuid, p_event text)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_owner uuid;
+begin
+  if p_id is null or p_event is null or p_event not in ('view', 'map') then return; end if;
+  select b.owner_id into v_owner from public.businesses b
+   where b.id = p_id and b.status = 'approved' and not b.is_demo;
+  if not found then return; end if;
+  if v_owner is not null and v_owner = (select auth.uid()) then return; end if;
+  begin
+    perform private.rate_limit('trk_' || p_event, private.client_key() || ':' || p_id::text, 'day',
+                               case p_event when 'view' then 1 else 3 end);
+  exception when sqlstate 'P0001' then
+    return;
+  end;
+  insert into public.business_daily_stats as s (business_id, day, views, map_clicks)
+  values (p_id, private.today_mx(), (p_event = 'view')::int, (p_event = 'map')::int)
+  on conflict (business_id, day) do update
+    set views = s.views + excluded.views, map_clicks = s.map_clicks + excluded.map_clicks;
+end;
 $$;
 
 -- ---- Suscripciones: lo que ve y puede hacer la persona usuaria --------

@@ -242,9 +242,11 @@ async function rest(path, { method = 'GET', query, body, prefer, single, anon } 
 const rpc = (fn, args, opts) => rest('/rpc/' + encodeURIComponent(fn), { method: 'POST', body: args || {}, anon: !!(opts && opts.anon) });
 
 // ---------- Archivos (Supabase Storage) ----------
-// Buckets: avatars y pet-photos son PRIVADOS (se ven con URL firmada temporal); qr-photos es público por diseño (la foto que
-// la persona decide mostrar en su placa). Las rutas válidas son <id-de-usuario>/<nombre-de-archivo>.
-const BUCKETS = ['avatars', 'pet-photos', 'qr-photos'];
+// Buckets: avatars y pet-photos son PRIVADOS (se ven con URL firmada temporal); qr-photos (la foto que la persona decide mostrar
+// en su placa) y business-media (logotipo y fotos de un aliado) son públicos por diseño. Las rutas válidas son
+// <id-de-usuario>/<nombre-de-archivo>.
+const BUCKETS = ['avatars', 'pet-photos', 'qr-photos', 'business-media'];
+const PUBLIC_BUCKETS = ['qr-photos', 'business-media'];
 const PATH_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9._-]{1,120}$/;
 function checkPath(bucket, path) {
   if (!BUCKETS.includes(bucket) || typeof path !== 'string' || !PATH_RE.test(path) || path.includes('..')) throw new TPError('bad_path', 'Ruta de archivo no válida.');
@@ -288,8 +290,8 @@ const storage = {
     });
     return out;
   },
-  publicUrl(bucket, path) {                                   // solo para buckets públicos (qr-photos)
-    if (bucket !== 'qr-photos') return null;
+  publicUrl(bucket, path) {                                   // solo para buckets públicos (qr-photos, business-media)
+    if (!PUBLIC_BUCKETS.includes(bucket)) return null;
     try { checkPath(bucket, path); } catch { return null; }
     return BASE + '/storage/v1/object/public/' + bucket + '/' + path;
   }

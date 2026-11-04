@@ -229,6 +229,16 @@ create table if not exists public.business_promotions (
 );
 create index if not exists business_promotions_business_idx on public.business_promotions (business_id, created_at desc);
 
+-- Estadísticas básicas del directorio (Etapa 5): SOLO contadores por día y por establecimiento.
+-- No se guarda IP, identidad ni nada que permita saber quién visitó la ficha.
+create table if not exists public.business_daily_stats (
+  business_id  uuid not null references public.businesses (id) on delete cascade,
+  day          date not null,
+  views        integer not null default 0 check (views >= 0),
+  map_clicks   integer not null default 0 check (map_clicks >= 0),
+  primary key (business_id, day)
+);
+
 -- ---------------------------------------------------------------------
 -- Denuncias anónimas.
 -- IMPORTANTE: esta tabla NO tiene ninguna columna que identifique a quien

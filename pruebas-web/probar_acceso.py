@@ -84,7 +84,9 @@ with sync_playwright() as pw:
     check('Ninguna página pública produce errores de script ni violaciones de CSP', not csp_problems(log), csp_problems(log)[:3])
     pg.goto(f'{ORIGIN}/index.html')
     check('Visitante: la cabecera ofrece Iniciar sesión y Crear cuenta', pg.locator('#acts a', has_text='Iniciar sesión').count() == 1 and pg.locator('#acts a', has_text='Crear cuenta').count() == 1)
-    check('Visitante: no se hace ninguna llamada a la red de Supabase solo por navegar', len(be.calls) == 0, be.calls[:2])
+    check('Visitante: solo el directorio (público, sin sesión) consulta a Supabase; el resto de las páginas no hace llamadas', be.calls and all(c['path'] == '/rest/v1/rpc/directory_search' and 'authorization' not in c['headers'] for c in be.calls), be.calls[:2])
+    n_dir = len(be.calls); pg.goto(f'{ORIGIN}/guias.html'); pg.goto(f'{ORIGIN}/planes.html'); pg.goto(f'{ORIGIN}/index.html'); pg.wait_for_load_state('load')
+    check('Visitante: guías, planes e inicio no llaman a Supabase solo por navegar', len(be.calls) == n_dir, be.calls[n_dir:][:2])
     ctx.close()
 
     # ================= 2. Guardas: visitante sin sesión =================
@@ -198,7 +200,7 @@ with sync_playwright() as pw:
     # aliado y admin
     ctx, log, pg = fresh(); pg.goto(f'{ORIGIN}/login.html'); fill_login(pg, 'aliado@ejemplo.mx', 'ClaveAliado123'); pg.wait_for_url(re.compile(r'panel-aliado\.html'), timeout=4000)
     pg.wait_for_selector('body.tp-ok')
-    check('Aliado: entra a su panel', 'Datos comerciales' in pg.inner_text('#main'))
+    check('Aliado: entra a su panel', 'Panel de aliados' in pg.inner_text('#main') and pg.locator('#pa-modulo').count() == 1 and 'Solo para aliados' not in pg.inner_text('#main'))
     check('Cabecera del aliado: "Mi negocio"', pg.locator('#acts a', has_text='Mi negocio').count() == 1)
     pg.goto(f'{ORIGIN}/mascota.html'); pg.wait_for_selector('body.tp-ok')
     check('Aliado en mascota.html: acceso denegado', 'Solo para dueños' in pg.inner_text('#main'), pg.inner_text('#main')[:80])

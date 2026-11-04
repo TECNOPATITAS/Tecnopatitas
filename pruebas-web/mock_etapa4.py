@@ -12,7 +12,9 @@ PLANS = {
     'pro': dict(id='pro', name='Huellita Pro', tagline='Cuidado digital', health_card_pet_limit=2, qr_enabled=False),
     'vip': dict(id='vip', name='Huellita VIP', tagline='Protección completa', health_card_pet_limit=None, qr_enabled=True),
 }
-BUCKETS = {'avatars': dict(limit=2 * 1024 * 1024, room=3), 'pet-photos': dict(limit=5 * 1024 * 1024, room=60), 'qr-photos': dict(limit=1024 * 1024, room=30)}
+BUCKETS = {'avatars': dict(limit=2 * 1024 * 1024, room=3), 'pet-photos': dict(limit=5 * 1024 * 1024, room=60), 'qr-photos': dict(limit=1024 * 1024, room=30),
+           'business-media': dict(limit=5 * 1024 * 1024, room=30)}
+PUBLIC_BUCKETS = ('qr-photos', 'business-media')
 INSERT_COLS = {
     'pets': {'id', 'name', 'photo_path', 'species', 'breed', 'sex', 'birth_date', 'weight_kg', 'description', 'vet_info'},
     'pet_vaccinations': {'pet_id', 'vaccine_name', 'applied_on', 'next_due_on', 'veterinarian', 'notes'},
@@ -212,7 +214,7 @@ class Backend4(Backend):
         m = re.match(r'^object/public/([^/]+)/(.+)$', rest)
         if m and method == 'GET':                                    # lectura pública (solo buckets públicos)
             b, p = m.group(1), urllib.parse.unquote(m.group(2)); o = self.objects.get((b, p))
-            if b != 'qr-photos' or not o: return err(404, 'not_found', 'Object not found')
+            if b not in PUBLIC_BUCKETS or not o: return err(404, 'not_found', 'Object not found')
             return 200, o['data'], o['type']
         m = re.match(r'^object/sign/([^/]+)/(.+)$', rest)
         if m and method == 'GET':                                    # descarga con URL firmada
@@ -246,6 +248,7 @@ class Backend4(Backend):
             if b not in BUCKETS: return err(404, 'Bucket not found', 'Bucket not found')
             if p.split('/')[0] != uid or susp: return err(403, 'Unauthorized', 'new row violates row-level security policy')
             if b == 'qr-photos' and not self.plan_of(uid)['qr_enabled']: return err(403, 'Unauthorized', 'new row violates row-level security policy')
+            if b == 'business-media' and self.profiles[uid]['account_type'] != 'business': return err(403, 'Unauthorized', 'new row violates row-level security policy')
             mine = [k for k, o in self.objects.items() if k[0] == b and o['owner'] == uid]
             if len(mine) >= BUCKETS[b]['room']: return err(403, 'Unauthorized', 'new row violates row-level security policy')
             ct, data = parse_multipart(h.get('content-type', ''), raw)

@@ -330,7 +330,8 @@ select t.ex('C registra un segundo negocio (queda pendiente)', '{C}', 'authentic
 select t.ex('NO se puede verificar un negocio que no está aprobado', '{D}', 'authenticated', $q$select public.admin_set_business_verified('{BIZ2}', true)$q$, 'ERR P0001%');
 select t.ex('C NO puede llamar a la verificación', '{C}', 'authenticated', $q$select public.admin_set_business_verified('{BIZ1}', true)$q$, 'ERR 42501%');
 select t.ex('D verifica el negocio aprobado de C', '{D}', 'authenticated', $q$select public.admin_set_business_verified('{BIZ1}', true)$q$, 'OK rows=1');
-select t.eq('El directorio muestra la verificación', null, 'anon', $q$select verified::text from public.directory_search('Vet Cris')$q$, 'true');
+select t.eq('Sin plan Oro, la etiqueta «verificado» NO se muestra (aunque un admin la haya puesto)', null, 'anon', $q$select verified::text from public.directory_search('Vet Cris')$q$, 'false');
+select t.eq('...pero la verificación sigue guardada', null, 'service_role', $q$select verified::text from public.businesses where id = '{BIZ1}'$q$, 'true');
 -- Beneficios por plan de aliado
 select t.ex('Sin plan, C NO puede poner botón de WhatsApp', '{C}', 'authenticated',
   $q$update public.businesses set whatsapp_url = 'https://wa.me/5215512345678' where id = '{BIZ1}'$q$, 'ERR P0001%WhatsApp%');
@@ -362,6 +363,8 @@ select t.eq('El directorio muestra el WhatsApp con plan Oro', null, 'anon', $q$s
 select t.eq('Las promociones activas se ven públicamente (2)', null, 'anon', $q$select jsonb_array_length(public.directory_get('{BIZ1}') -> 'promotions')::text$q$, '2');
 select t.eq('Oro: aparece primero (posicionamiento prioritario)', null, 'anon', $q$select name from public.directory_search() limit 1$q$, 'Vet Cris');
 select t.eq('Oro: marcado como prioritario', null, 'anon', $q$select is_priority::text from public.directory_search('Vet Cris')$q$, 'true');
+select t.eq('Oro: la etiqueta «verificado» sí se muestra (búsqueda)', null, 'anon', $q$select verified::text from public.directory_search('Vet Cris')$q$, 'true');
+select t.eq('Oro: la etiqueta «verificado» sí se muestra (ficha)', null, 'anon', $q$select public.directory_get('{BIZ1}') ->> 'verified'$q$, 'true');
 select t.ex('D cancela el plan de C', '{D}', 'authenticated', $q$select public.admin_cancel_subscription('{C}')$q$, 'OK rows=1');
 select t.eq('Sin plan, el teléfono guardado deja de mostrarse y las promociones se ocultan', null, 'anon',
   $q$select ((public.directory_get('{BIZ1}') ->> 'phone') is null and jsonb_array_length(public.directory_get('{BIZ1}') -> 'promotions') = 0
@@ -369,6 +372,7 @@ select t.eq('Sin plan, el teléfono guardado deja de mostrarse y las promociones
 select t.eq('Sin plan, el WhatsApp guardado deja de mostrarse', null, 'anon', $q$select (public.directory_get('{BIZ1}') ->> 'whatsapp_url') is null$q$, 'true');
 select t.eq('...aunque el dato sigue guardado', null, 'service_role', $q$select (whatsapp_url is not null)::text from public.businesses where id = '{BIZ1}'$q$, 'true');
 select t.eq('...y pierde la prioridad', null, 'anon', $q$select is_priority::text from public.directory_search('Vet Cris')$q$, 'false');
+select t.eq('...y deja de mostrarse la etiqueta «verificado»', null, 'anon', $q$select public.directory_get('{BIZ1}') ->> 'verified'$q$, 'false');
 -- Aislamiento entre aliados
 select t.ex('E NO puede editar el negocio de C', '{E}', 'authenticated', $q$update public.businesses set name = 'hack' where id = '{BIZ1}'$q$, 'OK rows=0');
 select t.ex('E NO puede borrar el negocio de C', '{E}', 'authenticated', $q$delete from public.businesses where id = '{BIZ1}'$q$, 'OK rows=0');
@@ -391,6 +395,61 @@ select t.eq('Un negocio suspendido sale del directorio (6)', null, 'anon', $q$se
 select t.ex('D reaprueba el negocio', '{D}', 'authenticated', $q$select public.admin_set_business_status('{BIZ1}', 'approved')$q$, 'OK rows=1');
 insert into public.businesses (owner_id, name, category, status) select '{C}', 'extra' || g, 'otro', 'pending' from generate_series(1, 3) g;
 select t.ex('Máximo 5 establecimientos por cuenta', '{C}', 'authenticated', $q$insert into public.businesses (name, category) values ('de más', 'otro')$q$, 'ERR P0001%');
+
+-- ---- Etapa 5: imágenes, horario y estadísticas del directorio ----
+select t.ex('Logotipo en la carpeta propia: permitido', '{C}', 'authenticated', $q$update public.businesses set logo_path = '{C}/logo-1.jpg' where id = '{BIZ1}'$q$, 'OK rows=1');
+select t.ex('Logotipo en la carpeta de OTRA cuenta: rechazado', '{C}', 'authenticated', $q$update public.businesses set logo_path = '{E}/logo.jpg' where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Logotipo con «..» (recorrido de carpetas): rechazado', '{C}', 'authenticated', $q$update public.businesses set logo_path = '{C}/..' where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Logotipo dentro de una subcarpeta: rechazado', '{C}', 'authenticated', $q$update public.businesses set logo_path = '{C}/a/b.jpg' where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Logotipo con una dirección web: rechazado', '{C}', 'authenticated', $q$update public.businesses set logo_path = 'https://sitio-malicioso.com/x.jpg' where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Fotos en la carpeta propia: permitido', '{C}', 'authenticated', $q$update public.businesses set photo_paths = array['{C}/f1.jpg', '{C}/f2.png'] where id = '{BIZ1}'$q$, 'OK rows=1');
+select t.ex('Una foto de OTRA cuenta entre las propias: rechazado', '{C}', 'authenticated', $q$update public.businesses set photo_paths = array['{C}/f1.jpg', '{E}/f2.png'] where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Un admin tampoco puede apuntar a archivos de otra cuenta', '{D}', 'authenticated', $q$update public.businesses set logo_path = '{E}/logo.jpg' where id = '{BIZ1}'$q$, 'ERR 23514%');
+alter table public.businesses disable trigger tp_guard;                       -- (se simula un dato antiguo, anterior a esta validación)
+update public.businesses set logo_path = 'legado/x.jpg' where id = '{BIZ1}';
+alter table public.businesses enable trigger tp_guard;
+select t.eq('(preparación) el valor antiguo quedó guardado', null, 'service_role', $q$select logo_path from public.businesses where id = '{BIZ1}'$q$, 'legado/x.jpg');
+select t.ex('Un valor antiguo no bloquea editar OTROS campos (solo se valida lo que cambia)', '{C}', 'authenticated', $q$update public.businesses set description = 'Texto nuevo' where id = '{BIZ1}'$q$, 'OK rows=1');
+select t.eq('...y el logotipo antiguo sigue ahí tras editar otro campo', null, 'service_role', $q$select logo_path from public.businesses where id = '{BIZ1}'$q$, 'legado/x.jpg');
+update public.businesses set logo_path = null, photo_paths = '{}' where id = '{BIZ1}';
+select t.ex('Horario por días en texto: permitido', '{C}', 'authenticated', $q$update public.businesses set hours = '{"lun": "09:00-18:00", "dom": "Cerrado"}' where id = '{BIZ1}'$q$, 'OK rows=1');
+select t.ex('Horario con valores anidados: rechazado', '{C}', 'authenticated', $q$update public.businesses set hours = '{"lun": {"a": "1"}}' where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Horario con un número como valor: rechazado', '{C}', 'authenticated', $q$update public.businesses set hours = '{"lun": 9}' where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Horario con día demasiado largo: rechazado', '{C}', 'authenticated', $q$update public.businesses set hours = jsonb_build_object(repeat('x', 21), '9') where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Horario con texto demasiado largo: rechazado', '{C}', 'authenticated', $q$update public.businesses set hours = jsonb_build_object('lun', repeat('x', 61)) where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Horario con más de 10 entradas: rechazado', '{C}', 'authenticated', $q$update public.businesses set hours = (select jsonb_object_agg('d' || g, '9') from generate_series(1, 11) g) where id = '{BIZ1}'$q$, 'ERR 23514%');
+select t.ex('Horario que no es un objeto: rechazado', '{C}', 'authenticated', $q$update public.businesses set hours = '["lun"]' where id = '{BIZ1}'$q$, 'ERR 23514%');
+
+-- Estadísticas del directorio
+select t.ok('La tabla de estadísticas NO guarda IP ni identidad de nadie',
+  (select string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_schema = 'public' and table_name = 'business_daily_stats') = 'business_id,day,views,map_clicks',
+  (select string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_schema = 'public' and table_name = 'business_daily_stats'));
+select t.ex('Un visitante cuenta como 1 visita a la ficha', null, 'anon', $q$select public.directory_track('{BIZ1}', 'view')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.10"}');
+select t.eq('...queda 1 visita', null, 'service_role', $q$select views::text from public.business_daily_stats where business_id = '{BIZ1}'$q$, '1');
+select t.ex('El mismo visitante, el mismo día, no suma otra visita (y no recibe error)', null, 'anon', $q$select public.directory_track('{BIZ1}', 'view')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.10"}');
+select t.eq('...sigue en 1', null, 'service_role', $q$select views::text from public.business_daily_stats where business_id = '{BIZ1}'$q$, '1');
+select t.ex('OTRO visitante sí suma', null, 'anon', $q$select public.directory_track('{BIZ1}', 'view')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.11"}');
+select t.eq('...ahora hay 2 visitas', null, 'service_role', $q$select views::text from public.business_daily_stats where business_id = '{BIZ1}'$q$, '2');
+select public.directory_track('{BIZ1}', 'map') from (select set_config('request.headers', '{"cf-connecting-ip":"203.0.113.10"}', true)) s;
+select public.directory_track('{BIZ1}', 'map') from (select set_config('request.headers', '{"cf-connecting-ip":"203.0.113.10"}', true)) s;
+select public.directory_track('{BIZ1}', 'map') from (select set_config('request.headers', '{"cf-connecting-ip":"203.0.113.10"}', true)) s;
+select public.directory_track('{BIZ1}', 'map') from (select set_config('request.headers', '{"cf-connecting-ip":"203.0.113.10"}', true)) s;
+select t.eq('Los clics en «Cómo llegar» de un visitante se limitan a 3 por día', null, 'service_role', $q$select map_clicks::text from public.business_daily_stats where business_id = '{BIZ1}'$q$, '3');
+select t.ex('Un evento desconocido se ignora sin error', null, 'anon', $q$select public.directory_track('{BIZ1}', 'borrar')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.12"}');
+select t.ex('Un establecimiento inexistente se ignora sin error', null, 'anon', $q$select public.directory_track('99999999-0000-4000-8000-000000000000', 'view')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.12"}');
+select t.ex('Un establecimiento pendiente no cuenta visitas', null, 'anon', $q$select public.directory_track('{BIZ2}', 'view')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.12"}');
+select public.directory_track((select id from public.businesses where is_demo limit 1), 'view');   -- (superusuario: la función ignora las fichas de demostración)
+select t.eq('...no se creó ninguna fila de más', null, 'service_role', $q$select count(*)::text from public.business_daily_stats$q$, '1');
+select t.ex('Las visitas del propio dueño no cuentan', '{C}', 'authenticated', $q$select public.directory_track('{BIZ1}', 'view')$q$, 'OK rows=1', '{"cf-connecting-ip":"203.0.113.50"}');
+select t.eq('...seguimos en 2 visitas', null, 'service_role', $q$select views::text from public.business_daily_stats where business_id = '{BIZ1}'$q$, '2');
+select t.eq('C ve las estadísticas de su negocio', '{C}', 'authenticated', $q$select views || '/' || map_clicks from public.business_daily_stats where business_id = '{BIZ1}'$q$, '2/3');
+select t.eq('E (otro aliado) NO ve las estadísticas de C', '{E}', 'authenticated', $q$select count(*) from public.business_daily_stats$q$, '0');
+select t.eq('B (dueño de mascota) NO ve estadísticas', '{B}', 'authenticated', $q$select count(*) from public.business_daily_stats$q$, '0');
+select t.eq('D (admin) ve las estadísticas', '{D}', 'authenticated', $q$select count(*) from public.business_daily_stats$q$, '1');
+select t.ex('Un anónimo NO puede leer las estadísticas', null, 'anon', $q$select * from public.business_daily_stats$q$, 'ERR 42501%');
+select t.ex('C NO puede inflar sus estadísticas (insertar)', '{C}', 'authenticated', $q$insert into public.business_daily_stats (business_id, day, views) values ('{BIZ1}', current_date - 1, 999)$q$, 'ERR 42501%');
+select t.ex('C NO puede editar sus estadísticas', '{C}', 'authenticated', $q$update public.business_daily_stats set views = 999 where business_id = '{BIZ1}'$q$, 'ERR 42501%');
+select t.ex('C NO puede borrar sus estadísticas', '{C}', 'authenticated', $q$delete from public.business_daily_stats where business_id = '{BIZ1}'$q$, 'ERR 42501%');
 
 -- =====================================================================
 select t.grupo('5 Denuncias anónimas');
@@ -600,10 +659,10 @@ select t.eq('Un visitante anónimo solo tiene acceso a tablas de contenido públ
   $q$select string_agg(c.relname, ',' order by c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind = 'r' and has_any_column_privilege('anon', c.oid, 'select,insert,update,references')$q$,
   'care_guides,subscription_plans');
-select t.eq('El anónimo solo puede ejecutar 5 funciones públicas', null, 'service_role',
+select t.eq('El anónimo solo puede ejecutar 6 funciones públicas', null, 'service_role',
   $q$select string_agg(p.proname, ',' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute')$q$,
-  'directory_get,directory_search,get_public_pet_profile,submit_complaint,track_complaint');
+  'directory_get,directory_search,directory_track,get_public_pet_profile,submit_complaint,track_complaint');
 select t.eq('admin_roles es inaccesible para anon y authenticated', null, 'service_role',
   $q$select (has_table_privilege('anon', 'public.admin_roles', 'select,insert,update,delete')
           or has_table_privilege('authenticated', 'public.admin_roles', 'select,insert,update,delete')

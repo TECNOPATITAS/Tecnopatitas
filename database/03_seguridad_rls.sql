@@ -27,7 +27,7 @@ begin
   foreach t in array array[
     'profiles', 'admin_roles', 'subscription_plans', 'subscriptions', 'subscription_events',
     'pets', 'pet_vaccinations', 'pet_deworming', 'pet_appointments', 'pet_qr_profiles',
-    'businesses', 'business_promotions', 'complaints', 'conversations', 'messages',
+    'businesses', 'business_promotions', 'business_daily_stats', 'complaints', 'conversations', 'messages',
     'notifications', 'care_guides', 'admin_audit_log'] loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
@@ -160,6 +160,12 @@ select pg_temp.pol('public.businesses', 'biz_delete', $p$
   create policy biz_delete on public.businesses for delete to authenticated
   using ((owner_id = (select auth.uid()) and (select public.is_active_user())) or (select public.is_admin())) $p$);
 
+-- Estadísticas del directorio: cada aliado lee solo las suyas; nadie escribe desde el navegador (solo directory_track).
+grant select on public.business_daily_stats to authenticated;
+select pg_temp.pol('public.business_daily_stats', 'stats_select', $p$
+  create policy stats_select on public.business_daily_stats for select to authenticated
+  using (business_id in (select b.id from public.businesses b where b.owner_id = (select auth.uid())) or (select public.is_admin())) $p$);
+
 grant select, delete on public.business_promotions to authenticated;
 grant insert (business_id, title, description, starts_on, ends_on, is_active) on public.business_promotions to authenticated;
 grant update (title, description, starts_on, ends_on, is_active) on public.business_promotions to authenticated;
@@ -265,6 +271,7 @@ grant execute on function public.track_complaint(text) to anon, authenticated;
 grant execute on function public.get_public_pet_profile(text) to anon, authenticated;
 grant execute on function public.directory_search(text, text, text, integer, integer) to anon, authenticated;
 grant execute on function public.directory_get(uuid) to anon, authenticated;
+grant execute on function public.directory_track(uuid, text) to anon, authenticated;
 
 -- Con sesión.
 grant execute on function public.is_admin(), public.is_active_user(), public.is_business_account() to authenticated;

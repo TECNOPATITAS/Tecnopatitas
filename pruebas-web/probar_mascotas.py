@@ -472,7 +472,7 @@ with sync_playwright() as pw:
       await t('trav',()=>TP.storage.upload('pet-photos','../otro/x.jpg',jpg));
       await t('traversal2',()=>TP.storage.upload('pet-photos',uid+'/../x.jpg',jpg));
       await t('subcarpeta',()=>TP.storage.upload('pet-photos',uid+'/a/b.jpg',jpg));
-      await t('bucket',()=>TP.storage.upload('business-media',uid+'/x.jpg',jpg));
+      await t('bucket',()=>TP.storage.upload('guide-images',uid+'/x.jpg',jpg));
       await t('tipo',()=>TP.storage.upload('pet-photos',uid+'/x.jpg',new Blob(['hola'],{type:'text/html'})));
       await t('svg',()=>TP.storage.upload('pet-photos',uid+'/x.jpg',new Blob(['<svg/>'],{type:'image/svg+xml'})));
       await t('punto2',()=>TP.storage.upload('pet-photos',uid+'/..',jpg));
@@ -480,6 +480,7 @@ with sync_playwright() as pw:
       await t('remove',()=>TP.storage.remove('pet-photos',['../x.jpg']));
       out.pub1=TP.storage.publicUrl('avatars',uid+'/x.jpg'); out.pub2=TP.storage.publicUrl('qr-photos','../x.jpg');
       out.pub3=TP.storage.publicUrl('qr-photos',uid+'/x.jpg');
+      out.pub4=TP.storage.publicUrl('business-media',uid+'/x.jpg'); out.pub5=TP.storage.publicUrl('business-media','../x.jpg'); out.pub6=TP.storage.publicUrl('pet-photos',uid+'/x.jpg');
       out.sign=JSON.stringify(await TP.storage.sign('pet-photos',['../x.jpg','nada']));
       return out}"""
     r = pg.evaluate(js)
@@ -487,7 +488,8 @@ with sync_playwright() as pw:
     check('Buckets no previstos se rechazan', r['bucket'] == 'bad_path' and r['remove'] == 'bad_path')
     check('Una ruta que termina en «..» (carpeta superior) se rechaza al subir y al borrar', r['punto2'] == 'bad_path' and r['punto2r'] == 'bad_path', r)
     check('Solo se suben imágenes JPG/PNG/WebP (HTML y SVG se rechazan)', r['tipo'] == 'bad_file_type' and r['svg'] == 'bad_file_type', r)
-    check('Solo qr-photos tiene URL pública; rutas raras no producen URL', r['pub1'] is None and r['pub2'] is None and r['pub3'].startswith('https://mtkbxnhsjqqdbrjeaslo.supabase.co/storage/v1/object/public/qr-photos/'), r)
+    check('Solo qr-photos y business-media tienen URL pública; rutas raras y buckets privados no producen URL', r['pub1'] is None and r['pub2'] is None and r['pub3'].startswith('https://mtkbxnhsjqqdbrjeaslo.supabase.co/storage/v1/object/public/qr-photos/')
+          and r['pub4'].startswith('https://mtkbxnhsjqqdbrjeaslo.supabase.co/storage/v1/object/public/business-media/') and r['pub5'] is None and r['pub6'] is None, r)
     check('Firmar rutas inválidas devuelve vacío sin llamar al servidor', r['sign'] == '{}' and not [c for c in be.calls if '/object/sign/' in c['path']])
     check('Ninguna llamada de archivos (rechazadas) llegó al servidor', not [c for c in be.calls if c['path'].startswith('/storage/')], [c['path'] for c in be.calls if c['path'].startswith('/storage/')][:3])
     ctx.close()

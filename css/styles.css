@@ -89,3 +89,45 @@ h4{margin:14px 0 6px;color:var(--pt);font-size:1rem}
 .pubcard{align-items:flex-start;gap:12px;padding:26px}
 .pubmsg{margin:0;padding:10px 14px;border-left:4px solid var(--co);background:#fff3e6;border-radius:0 12px 12px 0;overflow-wrap:anywhere}
 @media(max-width:600px){.qrpic svg{width:100%;height:auto;max-width:260px}}
+
+/* Etapa 5: directorio público y panel de aliados */
+.bizlist{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));align-items:start}
+.biz{gap:8px;align-content:start}
+.bizhead{display:flex;gap:12px;align-items:center}
+.bizlogo{width:56px;height:56px;flex:0 0 auto;border-radius:14px;object-fit:cover;background:var(--mn2);font-size:1.8rem}
+.bizname{min-width:0}.bizname h3{margin:0 0 6px;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.biz-desc{margin:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.biz-full{margin:0 0 8px;overflow-wrap:anywhere;white-space:pre-line}
+.biz-place{margin:0;color:var(--mut);font-size:.92rem;overflow-wrap:anywhere}
+.bizdetail{border-top:1px dashed var(--ln);margin-top:6px;padding-top:8px;overflow-wrap:anywhere}
+.bizdetail p{margin:0 0 8px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin:8px 0}
+.gallery figure{margin:0;display:flex;flex-direction:column;gap:6px}
+.gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;background:var(--mn2);display:block}
+.gallery .ph-emoji{aspect-ratio:4/3}
+table.hours{border-collapse:collapse;width:100%;max-width:460px}
+table.hours th{text-align:left;font-weight:700;padding:3px 10px 3px 0;white-space:nowrap}
+table.hours td{padding:3px 0}
+table.hours.edit{max-width:none}
+table.hours.edit th,table.hours.edit td{padding:4px 8px 4px 0}
+table.hours.edit thead th{color:var(--mut);font-size:.85rem}
+table.hours.edit select,table.hours.edit input{min-width:96px;padding:6px 8px}
+.tablewrap{overflow-x:auto;margin:6px 0 10px}
+.promos{margin:6px 0;padding-left:18px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.tabs a{padding:7px 14px;border-radius:99px;border:1px solid var(--ln);background:#fff;text-decoration:none;color:var(--ink);font-weight:700;font-size:.92rem}
+.tabs a:hover{background:var(--mn)}.tabs a[aria-current]{background:var(--pt);border-color:var(--pt);color:#fff}
+.bizstatus{margin-bottom:14px;gap:4px}.bizstatus p{margin:0}.bizstatus .btn{align-self:flex-start;margin-top:6px}
+.bizselect{margin:0 0 14px;padding-top:0;align-items:center}
+label.inline{display:flex;gap:10px;align-items:center;margin:0}label.inline select{width:auto;max-width:60vw}
+.statrow{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.statcard{padding:14px 16px}.statcard .big{font-size:2rem;font-weight:800;color:var(--pt);line-height:1.1}
+.statsday{border-collapse:collapse;width:100%}
+.statsday caption{text-align:left;font-weight:800;color:var(--pt);padding:4px 0}
+.statsday th,.statsday td{padding:4px 8px 4px 0;text-align:left;white-space:nowrap}
+.statsday thead th{color:var(--mut);font-size:.85rem}
+.sbar{display:inline-block;vertical-align:middle;width:calc(100% - 38px);min-width:60px;height:10px;background:var(--mn2);border-radius:99px;overflow:hidden}
+.sbar .fill{display:block;height:100%;border-radius:99px}.fill.v{background:var(--pt)}.fill.m{background:var(--co)}
+.statsday .n{display:inline-block;width:32px;text-align:right;font-weight:800}
+@media(max-width:600px){.bizlist{grid-template-columns:1fr}}

@@ -21,20 +21,20 @@ tbl as (
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname in ('public', 'private') and c.relkind in ('r', 'p')
 ),
-exp_public_fn as (select unnest(array['directory_get','directory_search','get_public_pet_profile','submit_complaint','track_complaint']) as f),
+exp_public_fn as (select unnest(array['directory_get','directory_search','directory_track','get_public_pet_profile','submit_complaint','track_complaint']) as f),
 exp_auth_fn as (select unnest(array[
   'admin_assign_subscription','admin_cancel_subscription','admin_dashboard_stats','admin_list_users','admin_renew_subscription',
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
-  'cancel_my_subscription','directory_get','directory_search','get_public_pet_profile','is_active_user','is_admin',
+  'cancel_my_subscription','directory_get','directory_search','directory_track','get_public_pet_profile','is_active_user','is_admin',
   'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','storage_has_room','submit_complaint','track_complaint']) as f),
 checks(n, grupo, comprobacion, ok, detalle) as (values
   -- ---------------- Estructura ----------------
-  (10, 'Estructura', 'Existen las 18 tablas de la plataforma en "public"',
+  (10, 'Estructura', 'Existen las 19 tablas de la plataforma en "public"',
     (select count(*) from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events',
-       'pets','pet_vaccinations','pet_deworming','pet_appointments','pet_qr_profiles','businesses','business_promotions','complaints',
-       'conversations','messages','notifications','care_guides','admin_audit_log')) = 18,
-    (select count(*)::text || ' de 18 encontradas' from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events',
-       'pets','pet_vaccinations','pet_deworming','pet_appointments','pet_qr_profiles','businesses','business_promotions','complaints',
+       'pets','pet_vaccinations','pet_deworming','pet_appointments','pet_qr_profiles','businesses','business_promotions','business_daily_stats','complaints',
+       'conversations','messages','notifications','care_guides','admin_audit_log')) = 19,
+    (select count(*)::text || ' de 19 encontradas' from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events',
+       'pets','pet_vaccinations','pet_deworming','pet_appointments','pet_qr_profiles','businesses','business_promotions','business_daily_stats','complaints',
        'conversations','messages','notifications','care_guides','admin_audit_log'))),
   (11, 'Estructura', 'Existen las 2 tablas internas del esquema "private"',
     (select count(*) from tbl where nspname = 'private') = 2, (select string_agg(relname, ', ') from tbl where nspname = 'private')),
@@ -63,11 +63,11 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     coalesce((select string_agg(relname, ',' order by relname) from tbl
               where nspname = 'public' and has_any_column_privilege('anon', oid, 'select,insert,update,references')), '') = 'care_guides,subscription_plans',
     (select string_agg(relname, ',' order by relname) from tbl where nspname = 'public' and has_any_column_privilege('anon', oid, 'select,insert,update,references'))),
-  (31, 'Permisos', 'Un visitante solo puede ejecutar las 5 funciones públicas (denuncias, seguimiento, QR, directorio)',
+  (31, 'Permisos', 'Un visitante solo puede ejecutar las 6 funciones públicas (denuncias, seguimiento, QR, directorio y su conteo de visitas)',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_public_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute'))),
-  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 21 funciones previstas',
+  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 23 funciones previstas',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_auth_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')
@@ -159,6 +159,16 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'pet_qr_profiles' and column_name = 'qr_photo_path')
     and exists (select 1 from pg_trigger t where t.tgrelid = 'public.pet_qr_profiles'::regclass and t.tgname = 'tp_guard' and not t.tgisinternal
                   and (t.tgtype & 2) = 2 and (t.tgtype & 4) = 4 and (t.tgtype & 16) = 16), null),
+
+  (65, 'Columnas protegidas', 'Aliados: las rutas de logotipo y fotos y el horario se validan en el servidor',
+    exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'private' and p.proname = 'guard_businesses'
+               and p.prosrc like '%El logotipo no es válido%' and p.prosrc like '%Una de las fotos no es válida%' and p.prosrc like '%El horario no es válido%'), null),
+  (66, 'Columnas protegidas', 'Estadísticas del directorio: el aliado solo puede leerlas; nadie las escribe desde el navegador',
+    has_table_privilege('authenticated', 'public.business_daily_stats', 'select')
+    and not (has_any_column_privilege('authenticated', 'public.business_daily_stats', 'insert,update')
+             or has_table_privilege('authenticated', 'public.business_daily_stats', 'delete')
+             or has_any_column_privilege('anon', 'public.business_daily_stats', 'select,insert,update')), null),
 
   -- ---------------- Informativo ----------------
   (90, 'INFO', 'Administradores registrados en admin_roles (debe haber al menos 1 después de crear el tuyo)',
