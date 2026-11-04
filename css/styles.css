@@ -53,3 +53,10 @@ label{display:block;font-weight:700;margin-bottom:12px}label small{font-weight:4
 #toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--pt);color:#fff;padding:12px 18px;border-radius:14px;max-width:min(92vw,480px);opacity:0;pointer-events:none;transition:.3s;z-index:50}#toast.on{opacity:1;transform:translate(-50%,0)}
 @media(max-width:900px){#mbtn{display:block}.panel{display:none;position:absolute;left:0;right:0;top:68px;background:var(--cr);flex-direction:column;align-items:stretch;padding:14px 20px;border-bottom:1px solid var(--ln)}.panel.open{display:flex}.links{flex-direction:column}.g2,.fg,.authwrap,.app,.chat{grid-template-columns:1fr}.authart{display:none}.side{position:static;display:flex;overflow-x:auto;gap:4px}.side a{white-space:nowrap}.art{max-width:300px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* Etapa 3: mensajes de formulario y páginas protegidas */
+.msg{padding:10px 14px;border-radius:12px;margin:0 0 14px;font-weight:700;line-height:1.45}
+.msg.err{background:#fde8e4;color:#7a1f0c;border:1px solid #f5b8a9}
+.msg.ok{background:var(--mn2);color:var(--pt2);border:1px solid var(--mn)}
+.msg.info{background:#fff3e6;color:#5a3a10;border:1px dashed var(--co)}
+body[data-guard]:not(.tp-ok) #main{visibility:hidden}
+button[disabled]{opacity:.6;cursor:not-allowed}
