@@ -1023,7 +1023,7 @@ def g12(br):
     pg.click('#ad-nav a[data-sec=usuarios]'); waitjs(pg, READY)
     check('12.3 Si el servidor responde algo inesperado en una lista, se muestra vacía sin romper la página', pg.locator('#ad-view .adm-row').count() == 0 and not [m for m in log if 'PAGEERROR' in m], [m for m in log if 'PAGEERROR' in m])
     be.fail_rest = lambda path, method: (200, {}) if path.endswith('/admin_dashboard_stats') else None
-    pg.click('#ad-nav a[data-sec=dash]'); waitjs(pg, READY)
+    pg.click('#ad-nav a[data-sec=dash]'); waitjs(pg, READY); waitjs(pg, "document.querySelectorAll('[data-stat] .stat').length === 11")   # (la segunda espera evita una carrera: READY podía cumplirse con la vista anterior)
     stats = pg.evaluate("Array.from(document.querySelectorAll('[data-stat] .stat')).map(s => s.textContent)")
     check('12.4 Si faltan cifras en el resumen se muestran como 0 (nunca «NaN» o «undefined»)', len(stats) == 11 and set(stats) == {'0'} and not junk(pg), stats)
     be.fail_rest = None

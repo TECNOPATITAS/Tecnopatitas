@@ -128,7 +128,7 @@ with sync_playwright() as pw:
     check('Con confirmación por correo activa: avisa de revisar el correo y NO inicia sesión', 'confirma tu correo' in msg_text(pg) and not pg.evaluate("!!localStorage.getItem('tp-auth-v1')"), msg_text(pg))
     check('El mensaje no afirma que el correo "fue enviado"', 'fue enviado' not in msg_text(pg).lower() and 'te enviamos' not in msg_text(pg).lower() or 'enviaremos' in msg_text(pg))
     check('La petición lleva la clave publishable y NO lleva cabecera Authorization', sc['headers'].get('apikey') == KEY and 'authorization' not in sc['headers'], sc['headers'])
-    check('Se envía el nombre y el tipo de cuenta como metadatos', sc['body']['data'] == {'display_name': 'Ana', 'account_type': 'owner'}, sc['body'])
+    check('Se envía el nombre, el tipo de cuenta y la versión de los términos aceptada (Etapa 11) como metadatos', sc['body']['data'] == {'display_name': 'Ana', 'account_type': 'owner', 'terms_version': re.search(r"VERSION: '([0-9-]+)'", open(os.path.join(ROOT, 'js/legal.js'), encoding='utf-8').read()).group(1)}, sc['body'])
     check('redirect_to apunta a login.html del mismo sitio', f'redirect_to={urllib.parse.quote(ORIGIN + "/login.html?confirmado=1", safe="")}' in sc['query'], sc['query'])
     check('Registro con confirmación pendiente: el perfil nace como dueño', be.profiles[be.users['ana@ejemplo.mx']['id']]['account_type'] == 'owner')
     check('Ninguna violación de CSP en el registro', not csp_problems(log), csp_problems(log)[:2])

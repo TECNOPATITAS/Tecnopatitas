@@ -17,12 +17,12 @@ f.addEventListener('submit',async e=>{
   else if(!['owner','business'].includes(tipo))err='Selecciona el tipo de cuenta.';
   else if((err=TP.checkPassword(pw,email)));
   else if(pw!==pw2)err='Las contraseñas no coinciden.';
-  else if(!f.consent.checked)err='Debes aceptar el uso de tus datos para crear la cuenta.';
+  else if(!f.consent.checked)err='Para crear la cuenta debes aceptar el Aviso de privacidad y los Términos y condiciones.';
   if(!err&&cap&&!cap.token()){err='Completa la verificación anti-robots antes de continuar.';cap.retry()}
   if(err){UI.msg(box,'err',err);return}
   UI.msg(box,null);UI.busy(btn,true,'Creando cuenta…');
   try{
-    const r=await TP.signUp({email,password:pw,displayName:name,accountType:tipo,redirectTo:new URL('login.html?confirmado=1',location.href).href,captchaToken:cap?cap.token():undefined});
+    const r=await TP.signUp({email,password:pw,displayName:name,accountType:tipo,redirectTo:new URL('login.html?confirmado=1',location.href).href,captchaToken:cap?cap.token():undefined,termsVersion:window.TP_LEGAL&&window.TP_LEGAL.VERSION});
     if(r.session){const m=await TP.me(true);location.replace(TP.homeFor(m));return}
     f.reset();
     UI.msg(box,'ok','Recibimos tu registro. Para activar la cuenta, confirma tu correo con el mensaje que te enviaremos (revisa también spam). Mientras no lo confirmes no podrás iniciar sesión. Si no llega en unos minutos, inténtalo de nuevo más tarde.');

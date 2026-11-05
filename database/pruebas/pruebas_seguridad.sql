@@ -1420,7 +1420,120 @@ select t.eq('PANEL · hacerse administrador sigue siendo imposible desde el nave
   $q$select public.is_admin()::text$q$, 'false');
 
 -- =====================================================================
-select t.grupo('13 Invariantes globales de seguridad');
+select t.grupo('13 Eliminar la cuenta y aceptación de términos (Etapa 11)');
+-- =====================================================================
+-- U1 dueña con mascota, carnet, QR, aviso, chat, plan y solicitud · U2 aliada con establecimiento y promoción · U3 persona ajena (no se debe tocar)
+-- U4 con una versión de términos inválida · U5 cuenta suspendida
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values
+ ('f1010101-0000-4000-8000-000000000001', 'dora@prueba.mx',  '{"display_name":"Dora","terms_version":"2026-11-05"}', now()),
+ ('f1010101-0000-4000-8000-000000000002', 'dario@prueba.mx', '{"display_name":"Darío","account_type":"business","terms_version":"2026-11-05"}', now()),
+ ('f1010101-0000-4000-8000-000000000003', 'dina@prueba.mx',  '{"display_name":"Dina"}', now()),
+ ('f1010101-0000-4000-8000-000000000004', 'dalia@prueba.mx', '{"display_name":"Dalia","terms_version":"hola<script>"}', now()),
+ ('f1010101-0000-4000-8000-000000000005', 'dante@prueba.mx', '{"display_name":"Dante","terms_version":"2026-11-05"}', now());
+select private.assign_subscription('f1010101-0000-4000-8000-000000000001', 'vip', 'monthly');
+insert into public.pets (id, owner_id, name, species) values
+ ('f2020202-0000-4000-8000-000000000001', 'f1010101-0000-4000-8000-000000000001', 'Rocky', 'perro'),
+ ('f2020202-0000-4000-8000-000000000003', 'f1010101-0000-4000-8000-000000000003', 'Michi', 'gato');
+insert into public.pet_vaccinations (pet_id, vaccine_name, applied_on) values ('f2020202-0000-4000-8000-000000000001', 'Rabia', current_date);
+insert into public.pet_qr_profiles (pet_id) values ('f2020202-0000-4000-8000-000000000001');
+insert into public.conversations (id, user_id, subject, last_message_at) values ('f3030303-0000-4000-8000-000000000001', 'f1010101-0000-4000-8000-000000000001', 'Duda', now());
+insert into public.messages (conversation_id, sender_id, body) values ('f3030303-0000-4000-8000-000000000001', 'f1010101-0000-4000-8000-000000000001', 'Hola, tengo una duda');
+select private.notify('f1010101-0000-4000-8000-000000000001', 'aviso', 'Aviso de prueba', 'Texto', null);
+select private.notify('f1010101-0000-4000-8000-000000000003', 'aviso', 'Aviso de Dina', 'Texto', null);
+insert into public.plan_requests (user_id, plan_id, billing_period) values ('f1010101-0000-4000-8000-000000000001', 'pro', 'monthly');
+insert into public.businesses (id, owner_id, name, category, state, municipality, status) values
+ ('f4040404-0000-4000-8000-000000000001', 'f1010101-0000-4000-8000-000000000002', 'Patitas de Darío', 'veterinaria', 'Jalisco', 'Zapopan', 'approved');
+insert into public.business_promotions (business_id, title, description, ends_on) values ('f4040404-0000-4000-8000-000000000001', 'Baño gratis', 'Prueba', private.today_mx() + 5);
+insert into public.admin_audit_log (admin_id, action, target_table, target_id) values ('{D}', 'user_suspend', 'profiles', 'f1010101-0000-4000-8000-000000000001');
+insert into t.vars select 'den_antes', count(*)::text from public.complaints;
+update public.profiles set is_suspended = true where id = 'f1010101-0000-4000-8000-000000000005';
+
+-- Preparación verificada: que de verdad exista todo lo que luego debe desaparecer (una prueba de "desaparece" con datos que nunca existieron no prueba nada)
+select t.eq('Antes de eliminar, Dora SÍ tiene perfil, mascota, carnet, placa QR, aviso, chat, plan y solicitud', null, 'postgres',
+  $q$select (select count(*) > 0 from public.profiles where id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) > 0 from public.pets where owner_id = 'f1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) > 0 from public.pet_vaccinations where pet_id = 'f2020202-0000-4000-8000-000000000001')::text || '|' || (select count(*) > 0 from public.pet_qr_profiles where pet_id = 'f2020202-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) > 0 from public.notifications where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) > 0 from public.conversations where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) > 0 from public.messages where conversation_id = 'f3030303-0000-4000-8000-000000000001')::text || '|' || (select count(*) > 0 from public.subscriptions where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) > 0 from public.subscription_events where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) > 0 from public.plan_requests where user_id = 'f1010101-0000-4000-8000-000000000001')::text$q$,
+  'true|true|true|true|true|true|true|true|true|true');
+select t.eq('Antes de eliminar, Darío SÍ tiene establecimiento y promoción', null, 'postgres',
+  $q$select (select count(*) > 0 from public.businesses where owner_id = 'f1010101-0000-4000-8000-000000000002')::text || '|' || (select count(*) > 0 from public.business_promotions where business_id = 'f4040404-0000-4000-8000-000000000001')::text$q$, 'true|true');
+
+-- Aceptación de términos
+select t.eq('Al registrarse con la versión de los términos, queda guardada con su fecha', null, 'postgres',
+  $q$select (terms_version = '2026-11-05' and terms_accepted_at is not null)::text from public.profiles where id = 'f1010101-0000-4000-8000-000000000001'$q$, 'true');
+select t.eq('Una cuenta creada sin aceptar (por ejemplo, desde el panel de Supabase) queda sin constancia', null, 'postgres',
+  $q$select (terms_version is null and terms_accepted_at is null)::text from public.profiles where id = 'f1010101-0000-4000-8000-000000000003'$q$, 'true');
+select t.eq('Una versión inventada o con símbolos NO se guarda', null, 'postgres',
+  $q$select (terms_version is null and terms_accepted_at is null)::text from public.profiles where id = 'f1010101-0000-4000-8000-000000000004'$q$, 'true');
+select t.ex('Nadie puede cambiar desde el navegador su constancia de términos', 'f1010101-0000-4000-8000-000000000001', 'authenticated',
+  $q$update public.profiles set terms_version = '2020-01-01', terms_accepted_at = null where id = 'f1010101-0000-4000-8000-000000000001'$q$, 'ERR 42501%');
+select t.ex('Ni siquiera con acceso total a la base se puede guardar una versión mal formada (la restricción CHECK la rechaza)', null, 'postgres',
+  $q$update public.profiles set terms_version = 'hola<script>' where id = 'f1010101-0000-4000-8000-000000000001'$q$, 'ERR 23514%');
+select t.eq('La constancia válida sigue intacta tras ese intento', null, 'postgres', $q$select terms_version from public.profiles where id = 'f1010101-0000-4000-8000-000000000001'$q$, '2026-11-05');
+select t.ok('Primer seguro: el navegador no tiene permiso de columna para escribir la constancia de términos (el trigger de perfiles es el segundo seguro)',
+  not has_column_privilege('authenticated', 'public.profiles', 'terms_version', 'update') and not has_column_privilege('authenticated', 'public.profiles', 'terms_accepted_at', 'update')
+  and not has_column_privilege('authenticated', 'public.profiles', 'terms_version', 'insert') and not has_column_privilege('authenticated', 'public.profiles', 'terms_accepted_at', 'insert')
+  and not has_column_privilege('anon', 'public.profiles', 'terms_version', 'select') and not has_column_privilege('anon', 'public.profiles', 'terms_accepted_at', 'select'), null);
+select t.eq('La persona sí puede ver su propia constancia', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select terms_version from public.profiles where id = 'f1010101-0000-4000-8000-000000000001'$q$, '2026-11-05');
+select t.eq('Y no la de otra persona', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select count(*) from public.profiles where id = 'f1010101-0000-4000-8000-000000000003'$q$, '0');
+
+-- Permisos de la función
+select t.ex('Un visitante anónimo NO puede eliminar cuentas', null, 'anon', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'ERR 42501%');
+select t.ok('La función de eliminar cuenta es solo para cuentas con sesión (no para visitantes)',
+  has_function_privilege('authenticated', 'public.delete_my_account(text)', 'execute') and not has_function_privilege('anon', 'public.delete_my_account(text)', 'execute'), null);
+select t.ok('La función de eliminar cuenta no recibe ningún identificador: solo puede borrar a quien la llama',
+  (select pronargs = 1 and proargnames = array['p_confirm'] from pg_proc where proname = 'delete_my_account' and pronamespace = 'public'::regnamespace), null);
+
+-- Confirmación
+select t.ex('Sin la frase de confirmación no se elimina', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account('eliminar')$q$, 'ERR P0001%ELIMINAR MI CUENTA%');
+select t.ex('La frase en minúsculas tampoco vale (se pide EXACTAMENTE en mayúsculas)', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account('eliminar mi cuenta')$q$, 'ERR P0001%ELIMINAR MI CUENTA%');
+select t.ex('Una frase con texto de más tampoco vale', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA YA')$q$, 'ERR P0001%ELIMINAR MI CUENTA%');
+select t.ex('Con rol «authenticated» pero SIN identidad en la sesión, la función se niega (no borra a nadie)', null, 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'ERR 42501%');
+select t.ex('Una confirmación vacía o nula tampoco', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account(null)$q$, 'ERR P0001%ELIMINAR MI CUENTA%');
+select t.eq('...y la cuenta sigue ahí con todo lo suyo', null, 'postgres',
+  $q$select (select count(*) from auth.users where id = 'f1010101-0000-4000-8000-000000000001')::text || (select count(*) from public.pets where owner_id = 'f1010101-0000-4000-8000-000000000001')::text$q$, '11');
+
+-- Administradores
+select t.ex('Una cuenta de administración NO puede eliminarse desde el navegador', '{D}', 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'ERR P0001%administración%');
+select t.eq('...y sigue siendo administradora', null, 'postgres', $q$select (count(*) = 1)::text from public.admin_roles where user_id = '{D}'$q$, 'true');
+
+-- Archivos: primero se borran con la API de Storage; el servidor se niega si quedan
+insert into storage.objects (bucket_id, name) values ('pet-photos', 'f1010101-0000-4000-8000-000000000001/rocky.jpg');
+select t.ex('Si todavía quedan archivos suyos, el servidor se niega (así no quedan archivos huérfanos)', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'ERR P0001%archivos%');
+select t.eq('...y no se borró nada', null, 'postgres', $q$select (select count(*) from auth.users where id = 'f1010101-0000-4000-8000-000000000001')::text || (select count(*) from storage.objects where name like 'f1010101-0000-4000-8000-000000000001/%')::text$q$, '11');
+select t.ex('La persona puede borrar sus propios archivos con la API (política de Storage)', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$delete from storage.objects where bucket_id = 'pet-photos' and name = 'f1010101-0000-4000-8000-000000000001/rocky.jpg'$q$, 'OK rows=1');
+
+-- Eliminación
+select t.ex('Con la frase correcta y sin archivos, la cuenta se elimina', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account('  ELIMINAR MI CUENTA  ')$q$, 'OK rows=1');
+select t.eq('Desaparecen la cuenta, el perfil, la mascota, el carnet, la placa QR, los avisos, el chat, el plan y la solicitud', null, 'postgres',
+  $q$select (select count(*) from auth.users where id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) from public.profiles where id = 'f1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) from public.pets where owner_id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) from public.pet_vaccinations where pet_id = 'f2020202-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) from public.pet_qr_profiles where pet_id = 'f2020202-0000-4000-8000-000000000001')::text || '|' || (select count(*) from public.notifications where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) from public.conversations where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) from public.messages where conversation_id = 'f3030303-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) from public.subscriptions where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|' || (select count(*) from public.subscription_events where user_id = 'f1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) from public.plan_requests where user_id = 'f1010101-0000-4000-8000-000000000001')::text$q$, '0|0|0|0|0|0|0|0|0|0|0');
+select t.eq('El correo queda libre: se puede volver a crear una cuenta con él', null, 'postgres', $q$select count(*) from auth.users where email = 'dora@prueba.mx'$q$, '0');
+select t.eq('La bitácora de administración se conserva (es un registro del equipo, sin contenidos)', null, 'postgres',
+  $q$select count(*) from public.admin_audit_log where action = 'user_suspend' and target_id = 'f1010101-0000-4000-8000-000000000001'$q$, '1');
+
+-- Aliada: se va su establecimiento
+select t.ex('Una aliada puede eliminar su cuenta', 'f1010101-0000-4000-8000-000000000002', 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'OK rows=1');
+select t.eq('...y con ella su establecimiento y su promoción dejan de existir (el directorio ya no los muestra)', null, 'postgres',
+  $q$select (select count(*) from public.businesses where owner_id = 'f1010101-0000-4000-8000-000000000002')::text || (select count(*) from public.business_promotions where business_id = 'f4040404-0000-4000-8000-000000000001')::text || (select count(*) from public.directory_search() where id = 'f4040404-0000-4000-8000-000000000001')::text$q$, '000');
+
+-- Cuenta suspendida: también tiene derecho a eliminarla
+select t.ex('Una cuenta suspendida también puede eliminarse', 'f1010101-0000-4000-8000-000000000005', 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'OK rows=1');
+
+-- Lo ajeno no se toca
+select t.eq('La otra persona conserva su perfil, su mascota y su aviso', null, 'postgres',
+  $q$select (select count(*) from public.profiles where id = 'f1010101-0000-4000-8000-000000000003')::text || (select count(*) from public.pets where owner_id = 'f1010101-0000-4000-8000-000000000003')::text || (select count(*) from public.notifications where user_id = 'f1010101-0000-4000-8000-000000000003')::text$q$, '111');
+select t.eq('Las denuncias anónimas NO se tocan (no están ligadas a ninguna cuenta)', null, 'postgres',
+  $q$select (count(*)::text = (select v from t.vars where k = 'den_antes'))::text from public.complaints$q$, 'true');
+select t.ex('Llamarla otra vez con la cuenta ya eliminada no falla ni toca a nadie más', 'f1010101-0000-4000-8000-000000000001', 'authenticated', $q$select public.delete_my_account('ELIMINAR MI CUENTA')$q$, 'OK rows=1');
+
+-- =====================================================================
+select t.grupo('14 Invariantes globales de seguridad');
 -- =====================================================================
 select t.ok('TODAS las tablas de public y private tienen RLS activado',
   not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace

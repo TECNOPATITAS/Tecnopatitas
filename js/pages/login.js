@@ -10,6 +10,7 @@ function go(m){const n=TP.safeNext(q.get('next'));location.replace(n&&UI.canOpen
   await TP.ready;
   if(TP.callback.error)UI.msg(box,'err','El enlace venció o ya se usó. Si ya confirmaste tu correo, inicia sesión; si no, solicita ayuda o regístrate de nuevo.');
   if(TP.hasSession()){try{const m=await TP.me();if(m){go(m);return}}catch{}}
+  if(q.get('eliminada')==='1')UI.msg(box,'ok','Tu cuenta y tus datos se eliminaron. Gracias por haber usado TECNOPATITAS.');
   if(q.get('confirmado')&&!TP.callback.error)UI.msg(box,'info','Si ya confirmaste tu correo, inicia sesión para continuar.');
 })();
 f.addEventListener('submit',async e=>{

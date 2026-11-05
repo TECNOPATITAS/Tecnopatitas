@@ -299,6 +299,7 @@ grant execute on function public.storage_has_room(text, integer) to authenticate
 grant execute on function public.has_qr_plan() to authenticated;
 grant execute on function public.start_conversation(text, text) to authenticated;
 grant execute on function public.generate_my_reminders() to authenticated;
+grant execute on function public.delete_my_account(text) to authenticated;
 
 -- Administración (cada función vuelve a comprobar is_admin() en el servidor).
 grant execute on function public.admin_dashboard_stats() to authenticated;

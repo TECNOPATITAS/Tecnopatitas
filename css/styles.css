@@ -272,3 +272,17 @@ label.inline{display:flex;gap:10px;align-items:center;margin:0}label.inline sele
   .adm-bubble{max-width:94%}.adm-ask{width:100%}
   .adm-check input{width:26px;height:26px}
 }
+
+/* ---- Etapa 11: textos legales y eliminación de cuenta ---- */
+.legal{max-width:78ch;margin:0 auto;background:#fff;border:1px solid var(--ln);border-radius:var(--r);padding:28px 32px;box-shadow:0 6px 20px rgba(31,43,77,.08);overflow-wrap:anywhere}
+.legal h2{font-size:1.25rem;margin:1.6em 0 .4em}.legal h2:first-of-type{margin-top:.2em}
+.legal p,.legal li{line-height:1.7}.legal ul{padding-left:1.2em}.legal li{margin:.45em 0}
+.legal .toc{background:var(--sk2);border:1px dashed var(--bd);border-radius:14px;padding:12px 18px;margin:0 0 18px}.legal .toc ol{margin:.4em 0 0;padding-left:1.4em;columns:2;column-gap:28px}.legal .toc li{margin:.15em 0;break-inside:avoid}
+@media(max-width:700px){.legal{padding:20px 16px}.legal .toc ol{columns:1}}
+.foot .lg-h{display:block;margin-top:14px}
+.ck.long{align-items:flex-start;line-height:1.5}.ck.long input{margin-top:.3em;flex:0 0 auto}
+.danger{border:2px solid var(--rose);background:var(--pk2)}.danger h3{color:var(--rose)}
+.btn.danger-btn{background:var(--rose);border-color:var(--rose);color:#fff}
+@media(max-width:900px){body[data-page=perfil] .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}body[data-page=perfil] .card .btn{align-self:flex-start}body[data-page=perfil] .row .btn{flex:1 1 auto}}
+.msg{overflow-wrap:anywhere}
+@media(max-width:900px){.app>*{min-width:0}}   /* la rejilla de una sola columna no debe ensancharse por el menú lateral (que ya se desplaza por su cuenta) */

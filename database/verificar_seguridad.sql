@@ -27,7 +27,7 @@ exp_auth_fn as (select unnest(array[
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
   'cancel_my_subscription','directory_get','directory_search','directory_track','get_public_pet_profile','is_active_user','is_admin',
   'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','start_conversation','storage_has_room','track_complaint','generate_my_reminders',
-  'request_plan','cancel_plan_request','admin_resolve_plan_request',
+  'request_plan','cancel_plan_request','admin_resolve_plan_request','delete_my_account',
   -- Panel de administración (Etapa 10): todas comprueban is_admin() en el servidor
   'admin_get_user','admin_list_businesses','admin_get_business','admin_delete_promotion','admin_list_complaints','admin_get_complaint',
   'admin_update_complaint','admin_list_guides','admin_get_guide','admin_save_guide','admin_delete_guide','admin_list_plan_requests',

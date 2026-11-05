@@ -29,8 +29,8 @@ const TPPlans={PLANS,mxn,yearly:false,cta:null,render(){
 }};
 window.TPPlans=TPPlans;
 function init(){
-  const mini=document.querySelector('#plans-mini');
-  if(mini)mini.innerHTML=PLANS.map(p=>`<a class="card" href="planes.html"><h3>${p.n}</h3><small>${p.g?'Aliados comerciales':'Dueños de mascotas'}</small><div class="price">${mxn(p.m)}<small>${p.m?' /mes':' · gratis'}</small></div></a>`).join('');
+  const mini=document.querySelector('#plans-mini'),E=window.TPUI&&window.TPUI.el;
+  if(mini&&E)mini.replaceChildren(...PLANS.map(p=>E('a',{class:'card',href:'planes.html'},E('h3',{text:p.n}),E('small',{text:p.g?'Aliados comerciales':'Dueños de mascotas'}),E('div',{class:'price'},mxn(p.m),E('small',{text:p.m?' /mes':' · gratis'})))));
   if(document.querySelector('#pu')){
     TPPlans.render();
     document.querySelectorAll('[data-bill]').forEach(b=>b.onclick=()=>{TPPlans.yearly=b.dataset.bill==='y';document.querySelectorAll('[data-bill]').forEach(x=>x.setAttribute('aria-pressed',x===b));TPPlans.render()});

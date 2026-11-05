@@ -198,8 +198,8 @@ def g1(br):
     check('1.2 La página tiene el panel #mine (oculto de inicio) y la nota #stage-note', re.search(r'id="mine"[^>]*hidden', html) is not None and 'id="stage-note"' in html)
     check('1.3 planes.js no usa innerHTML, eval ni document.write', not re.findall(r'innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function', PLANES_JS))
     inner = re.findall(r'.*innerHTML.*', PLANS_JS)
-    check('1.4 En plans.js, innerHTML solo se usa para las tarjetas de ejemplo de la portada, con datos del catálogo fijo; las tarjetas de planes se arman sin innerHTML',
-          len(inner) == 1 and 'plans-mini' in PLANS_JS[:PLANS_JS.index('innerHTML')][-200:], inner)
+    check('1.4 plans.js no usa innerHTML (Etapa 11): las tarjetas de ejemplo de la portada (#plans-mini) y las de planes se arman con elementos de TPUI.el',
+          not inner and 'plans-mini' in PLANS_JS and 'replaceChildren' in PLANS_JS and 'TPUI' in PLANS_JS, inner)
     check('1.5 Ningún archivo de la página contiene claves secretas ni service_role', all(not re.search(r'sb_secret_|service_role', t) for t in (html, PLANS_JS, PLANES_JS)))
     check('1.6 El texto de la página aclara que NO hay cobros ni datos de pago', 'no están habilitados' in html and 'no se piden tarjetas ni datos bancarios' in html)
     reset_state()
@@ -244,6 +244,20 @@ def g2(br):
     check('2.13 Con la sesión vencida la página se ve como la de un visitante (enlaces de registro, sin panel)',
           pg.evaluate("document.getElementById('mine').hidden") and c['pro']['links'][0]['href'] == 'registro.html?plan=pro' and not any(c[k]['buttons'] for k in c), [pg.evaluate("document.getElementById('mine').hidden"), c['pro']])
     check('2.14 La nota original NO se reemplazó (no hubo sesión válida)', 'Elegir un plan te llevará al registro' in txt(pg, '#stage-note'), txt(pg, '#stage-note'))
+    ctx.close()
+    # Etapa 11: las tarjetas de ejemplo de la portada ya no se arman con innerHTML sino con TPUI.el: se comprueba que se ven igual
+    reset_state()
+    ctx = new_ctx(br); log = []; all_logs.append(log); pg = ctx.new_page(); CUR[0] = pg
+    pg.on('console', lambda m: log.append(m.text) if m.type in ('error', 'warning') else None)
+    pg.on('pageerror', lambda e: log.append('PAGEERROR ' + str(e)))
+    pg.goto(f'{ORIGIN}/index.html'); waitjs(pg, "document.querySelectorAll('#plans-mini .card').length === 5")
+    mini = pg.evaluate("Array.from(document.querySelectorAll('#plans-mini .card')).map(a => ({tag: a.tagName, href: a.getAttribute('href'), h3: a.querySelector('h3').textContent, who: a.querySelector('small').textContent, price: a.querySelector('.price').textContent, kids: a.children.length}))")
+    check('2.15 La portada muestra las 5 tarjetas de ejemplo (enlaces a planes.html) con nombre, a quién va dirigido y precio',
+          len(mini) == 5 and all(m['tag'] == 'A' and m['href'] == 'planes.html' and m['kids'] == 3 for m in mini)
+          and [m['who'] for m in mini] == ['Dueños de mascotas'] * 3 + ['Aliados comerciales'] * 2
+          and [m['price'] for m in mini] == ['$0 MXN · gratis', '$29 MXN /mes', '$59 MXN /mes', '$149 MXN /mes', '$299 MXN /mes'] and all(m['h3'].strip() for m in mini), mini)
+    check('2.16 Esas tarjetas llevan los mismos nombres que el catálogo de la página de planes', [m['h3'] for m in mini] == [c[k]['name'] for k in c], ([m['h3'] for m in mini], [c[k]['name'] for k in c]))
+    check('2.17 La portada carga sin errores de consola ni de CSP', not csp_problems(log), csp_problems(log))
     ctx.close()
 
 def g3(br):

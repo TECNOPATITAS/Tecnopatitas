@@ -199,11 +199,13 @@ create or replace function private.handle_new_user()
 returns trigger language plpgsql security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, display_name, account_type)
+  insert into public.profiles (id, display_name, account_type, terms_version, terms_accepted_at)
   values (
     new.id,
     left(btrim(coalesce(new.raw_user_meta_data ->> 'display_name', '')), 80),
-    case when new.raw_user_meta_data ->> 'account_type' = 'business' then 'business' else 'owner' end
+    case when new.raw_user_meta_data ->> 'account_type' = 'business' then 'business' else 'owner' end,
+    case when new.raw_user_meta_data ->> 'terms_version' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then new.raw_user_meta_data ->> 'terms_version' end,
+    case when new.raw_user_meta_data ->> 'terms_version' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then now() end
   )
   on conflict (id) do nothing;
   return new;
@@ -1981,5 +1983,33 @@ begin
      where v_pre is null or a.action like replace(v_pre, '_', '\_') || '%' escape '\'
      order by a.created_at desc, a.id desc
      limit v_limit offset v_off;
+end;
+$$;
+
+-- =====================================================================
+-- Etapa 11 · Eliminar la cuenta propia
+-- =====================================================================
+-- La persona borra SU cuenta. Borrar la fila de auth.users elimina en cascada (por las claves foráneas) el perfil, las mascotas y su
+-- carnet, la placa QR, los avisos, las conversaciones y mensajes, las suscripciones y solicitudes, y los establecimientos con sus
+-- promociones y estadísticas. NO se tocan las denuncias anónimas (no están ligadas a ninguna cuenta).
+-- Los ARCHIVOS (fotos, logotipos) los borra antes el navegador con la API de Storage: borrar filas de storage.objects por SQL dejaría
+-- los archivos huérfanos. Por eso esta función se niega si todavía quedan archivos en la carpeta de la persona.
+-- Las cuentas de administración no se eliminan por aquí (otra persona administradora lo hace desde el SQL Editor).
+create or replace function public.delete_my_account(p_confirm text)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_uid uuid := (select auth.uid());
+begin
+  if v_uid is null then raise exception 'Inicia sesión para continuar.' using errcode = '42501'; end if;
+  if exists (select 1 from public.admin_roles r where r.user_id = v_uid) then
+    raise exception 'Las cuentas de administración no se eliminan desde aquí. Pide a otra persona administradora que lo haga.' using errcode = 'P0001';
+  end if;
+  if btrim(coalesce(p_confirm, '')) is distinct from 'ELIMINAR MI CUENTA' then
+    raise exception 'Para eliminar la cuenta escribe exactamente: ELIMINAR MI CUENTA' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from storage.objects o where (storage.foldername(o.name))[1] = v_uid::text) then
+    raise exception 'Primero hay que borrar tus archivos (fotos y logotipos). Vuelve a intentarlo desde Perfil.' using errcode = 'P0001';
+  end if;
+  delete from auth.users where id = v_uid;
 end;
 $$;

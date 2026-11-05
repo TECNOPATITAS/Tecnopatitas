@@ -1,0 +1,45 @@
+# =====================================================================
+# TECNOPATITAS · Etapa 11 · OPCIONAL · Mantener activo el proyecto gratuito de Supabase
+#
+# Supabase pausa los proyectos gratuitos tras unos 7 días sin actividad. Este flujo de GitHub Actions
+# hace UNA consulta pública y mínima cada 3 días (la misma que haría cualquier visitante: leer el catálogo de planes).
+#
+# ESTE ARCHIVO NO HACE NADA mientras esté en la carpeta «opcional». Para activarlo (si tú quieres):
+#   1) En tu repositorio de GitHub: Add file → Create new file.
+#   2) En el nombre escribe exactamente:   .github/workflows/mantener-activo.yml
+#      (al escribir las diagonales «/» GitHub crea las carpetas solo).
+#   3) Pega aquí todo este contenido y pulsa «Commit changes».
+# Para desactivarlo: Actions → «Mantener activo Supabase» → ··· → Disable workflow (o borra el archivo).
+#
+# Sobre costos y garantías (con honestidad):
+#   · No usa claves secretas: lee del propio js/config.js la URL y la clave PUBLISHABLE (que ya son públicas).
+#   · GitHub Actions es gratuito para repositorios públicos; en uno privado la cuenta gratuita incluye minutos al mes
+#     (esto usa menos de 1 minuto cada 3 días) y NO se cobra nada si no registraste una tarjeta en GitHub. No agregues tarjeta.
+#   · La documentación de Supabase dice que hacer consultas a la API cuenta como actividad, pero no define cuánta es «suficiente»
+#     ni garantiza que sus reglas no cambien: revisa
+#     el aviso de pausa en tu panel. En repositorios públicos GitHub desactiva solos los flujos programados tras 60 días sin
+#     cambios en el repositorio; si pasa, se reactivan con un clic en la pestaña Actions.
+# =====================================================================
+name: Mantener activo Supabase
+
+on:
+  schedule:
+    - cron: '23 15 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Consulta pública mínima
+        run: |
+          URL=$(grep -o "https://[a-z0-9]*\.supabase\.co" js/config.js | head -1)
+          KEY=$(grep -o "sb_publishable_[A-Za-z0-9_-]*" js/config.js | head -1)
+          test -n "$URL" && test -n "$KEY" || { echo "No encontré la URL o la clave pública en js/config.js"; exit 1; }
+          curl -fsS --max-time 30 "$URL/rest/v1/subscription_plans?select=id&limit=1" -H "apikey: $KEY"
+          echo

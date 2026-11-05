@@ -197,8 +197,9 @@ const ready = consumeUrlCallback().catch(() => {});
 
 // ---------- Autenticación ----------
 const withCaptcha = (body, token) => token ? Object.assign(body, { gotrue_meta_security: { captcha_token: String(token) } }) : body;   // Cloudflare Turnstile; Supabase Auth lo comprueba si se activó «CAPTCHA protection»
-async function signUp({ email, password, displayName, accountType, redirectTo, captchaToken }) {
+async function signUp({ email, password, displayName, accountType, redirectTo, captchaToken, termsVersion }) {
   const data = { display_name: displayName, account_type: accountType === 'business' ? 'business' : 'owner' };
+  if (typeof termsVersion === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(termsVersion)) data.terms_version = termsVersion;   // constancia de que aceptó los términos y el aviso (el servidor la vuelve a validar)
   const r = await http('/auth/v1/signup', { method: 'POST', query: redirectTo ? 'redirect_to=' + encodeURIComponent(redirectTo) : '', body: withCaptcha({ email, password, data }, captchaToken) });
   if (r && r.access_token) {                                  // la confirmación por correo está desactivada: entra directo
     writeSession(toSession(r)); cache = null; emit('SIGNED_IN');
@@ -297,6 +298,19 @@ const storage = {
     if (!paths.length) return;
     try { await authed('/storage/v1/object/' + bucket, { method: 'DELETE', body: { prefixes: paths } }); }
     catch (e) { throw storageError(e); }
+  },
+  async listFolder(bucket, uid) {                             // → ['<uid>/archivo.jpg', …] de la carpeta propia (solo las políticas de Storage dejan ver la propia)
+    if (!BUCKETS.includes(bucket) || typeof uid !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uid)) throw new TPError('bad_path', 'Ruta de archivo no válida.');
+    const out = [];
+    for (let offset = 0; offset < 2000; offset += 100) {      // tope de seguridad: las cuentas tienen topes de archivos mucho menores
+      let r;
+      try { r = await authed('/storage/v1/object/list/' + bucket, { method: 'POST', body: { prefix: uid, limit: 100, offset, sortBy: { column: 'name', order: 'asc' } } }); }
+      catch (e) { throw storageError(e); }
+      const rows = Array.isArray(r) ? r : [];
+      rows.forEach(o => { if (o && typeof o.name === 'string' && o.id) out.push(uid + '/' + o.name); });   // las «carpetas» no traen id
+      if (rows.length < 100) break;
+    }
+    return out;
   },
   async sign(bucket, paths, expiresIn) {                      // → { ruta: urlFirmada | null }
     const out = {};

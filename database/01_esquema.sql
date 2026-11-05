@@ -27,6 +27,12 @@ create table if not exists public.profiles (
   updated_at          timestamptz not null default now()
 );
 
+-- Etapa 11: constancia de que la persona aceptó los términos y el aviso de privacidad al crear su cuenta (versión = fecha del texto).
+-- Solo la escribe el disparador de registro; nadie puede cambiarla desde el navegador.
+alter table public.profiles add column if not exists terms_version text
+  check (terms_version is null or terms_version ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+alter table public.profiles add column if not exists terms_accepted_at timestamptz;
+
 -- ---------------------------------------------------------------------
 -- Administradores. SOLO se escribe desde el SQL Editor o con service_role.
 -- Ningún usuario puede insertarse aquí desde el navegador.

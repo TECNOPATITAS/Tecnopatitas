@@ -34,7 +34,7 @@ Tiempo aproximado: 15 minutos. **Costo: $0.** No necesitas tarjeta. Si en algún
 
 ## Paso 4 (opcional) · Datos de demostración
 
-Para ver el directorio y las guías con contenido de ejemplo, ejecuta igual **`06_datos_demo.sql`**. Son 6 negocios **ficticios** (marcados como demostración) y 8 guías **generales** marcadas «pendiente de revisión veterinaria». Antes de abrir el sitio al público, bórralos o reemplázalos (`delete from public.businesses where is_demo;`).
+Para ver el directorio y las guías con contenido de ejemplo, ejecuta igual **`06_datos_demo.sql`**. Son 6 negocios **ficticios** (marcados como demostración) y 8 guías **generales** marcadas «pendiente de revisión veterinaria». Antes de abrir el sitio al público, bórralos ejecutando **`07_limpiar_demo.sql`** (borra solo la demostración; no toca cuentas ni datos reales) y revisa qué hacer con las guías pendientes en `GUIA_ETAPA_11.md`.
 
 ## Paso 5 · Verificar que quedó seguro
 
@@ -94,7 +94,7 @@ Solo dos datos, ambos **públicos por diseño** (la seguridad la dan las políti
 
 ## Para desarrolladores: ejecutar las pruebas en tu computadora (opcional)
 
-Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 735 pruebas de seguridad y funcionamiento:
+Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 770 pruebas de seguridad y funcionamiento:
 
 ```bash
 bash database/pruebas/ejecutar_pruebas.sh
