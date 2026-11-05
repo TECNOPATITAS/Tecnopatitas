@@ -2,20 +2,21 @@
 
 Plataforma para el cuidado, protección y bienestar de las mascotas. Se construye **por etapas**; este archivo dice qué está terminado y qué no.
 
-## Estado actual: Etapa 9 de 11 (planes y suscripciones, sin cobros)
+## Estado actual: Etapa 10 de 11 (panel de administración)
 
 | Etapa | Contenido | Estado |
 |---|---|---|
 | 1 | Estructura, diseño y navegación | Terminada |
-| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4, 5, 6, 7, 8 y 9 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 37 comprobaciones |
+| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4 a 10 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 37 comprobaciones |
 | 3 | Registro, inicio de sesión, recuperar contraseña, sesión, roles y protección de páginas | Terminada y probada en tu sitio real |
 | 4 | Mascotas, carnet de salud digital, subida de fotos (Supabase Storage) y placa QR (Huellita VIP) | Terminada y probada en tu sitio real |
 | 5 | Directorio público y panel de aliados: alta del negocio, datos, logotipo y fotos, horarios, promociones, estadísticas y enlaces a Google Maps | Terminada y probada por ti |
 | 6 | Denuncias anónimas con código de seguimiento, fotos de evidencia por una función segura y anti-robots con Cloudflare Turnstile (también en registro, inicio de sesión y recuperar) | Escrita y probada contra simuladores. Faltan tus pasos manuales y pruebas en tu sitio real: `GUIA_ETAPA_6.md` |
 | 7 | Chat de atención al cliente: conversaciones entre una persona y el equipo, mensajes en vivo (Supabase Realtime) con respaldo por consulta, límites diarios por cuenta y cuenta suspendida solo lectura | Escrita y probada contra simuladores (171 pruebas de navegador del chat + 457 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_7.md` |
 | 8 | Notificaciones: pantalla con lista, filtros y preferencias, campanita con el número de no leídas, recordatorios de vacunas, desparasitaciones y citas, y avisos al equipo (denuncias y chat). Solo dentro de la plataforma: todavía no se envían correos ni WhatsApp | Escrita y probada contra simuladores (194 pruebas de navegador + 511 de SQL). Probar en tu sitio real: `GUIA_ETAPA_8.md` |
-| **9** | **Planes y suscripciones sin cobros: «Tu plan» con vigencia, solicitud de plan (o de renovación), cancelación, historial con la respuesta del equipo, avisos de vencimiento. El equipo aprueba o rechaza desde SQL y activa el plan a mano. Además, guía para usar Gmail como servicio de correo de las cuentas (confirmar y recuperar contraseña) con plantillas en español** | **Escrita y probada contra simuladores (195 pruebas de navegador + 62 de plantillas de correo + 603 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_9.md` y `GUIA_CORREOS_GMAIL.md`** |
-| 10–11 | Panel admin, publicación | Pendientes |
+| **9** | **Planes y suscripciones sin cobros: «Tu plan» con vigencia, solicitud de plan (o de renovación), cancelación, historial con la respuesta del equipo, avisos de vencimiento. El equipo aprueba o rechaza desde SQL y activa el plan a mano. Además, guía (y plantillas) para usar Gmail como correo de las cuentas, que desde la Etapa 10 ya no se usa** | **Escrita y probada contra simuladores (195 pruebas de navegador + 62 de plantillas de correo + 603 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_9.md` y `GUIA_CORREOS_GMAIL.md`** |
+| **10** | **Panel de administración (`admin.html`) conectado a la base de datos: resumen, usuarios (suspender/reactivar, asignar plan a mano), aliados (aprobar, rechazar, suspender, verificar, retirar promociones), denuncias (estado, prioridad, seguimiento público y notas internas, fotos de evidencia), guías de cuidado (editor con borradores y publicación), suscripciones y solicitudes de plan, atención al cliente (responder el chat) y bitácora. La página pública de guías (`guias.html`) ahora lee las guías publicadas. Sin Gmail y con la confirmación de correo desactivada (la desactivas tú en Supabase)** | **Escrita y probada contra simuladores (271 pruebas de navegador del panel + 735 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_10.md`** |
+| 11 | Publicación | Pendiente |
 
 **Terminado en la Etapa 2** (carpeta `database/`)
 
@@ -26,7 +27,7 @@ Plataforma para el cuidado, protección y bienestar de las mascotas. Se construy
 - Chat, notificaciones, guías, directorio con filtros, placa QR con token aleatorio, bitácora de acciones de administración.
 - 6 buckets de archivos (solo JPG/PNG/WebP, con tope de tamaño y de cantidad por persona). El sexto, `qr-photos`, se añadió en la Etapa 4.
 - Datos de demostración **opcionales y claramente falsos** (`06_datos_demo.sql`).
-- 603 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5, 420 hasta la Etapa 6, 457 hasta la Etapa 7 y 511 hasta la Etapa 8) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
+- 735 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5, 420 hasta la Etapa 6, 457 hasta la Etapa 7, 511 hasta la Etapa 8 y 603 hasta la Etapa 9) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
 
 **Cómo se probó la Etapa 2, con honestidad**
 
@@ -149,16 +150,33 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 - **Errores reales que las pruebas encontraron y ya corregí:** una cuenta de administración habría visto las solicitudes de todas las personas en su pantalla (RLS lo permite al equipo; ahora se filtra por la propia cuenta); botones Mensual/Anual de 41 px en teléfono; un mensaje confuso («cuenta suspendida») al caducar la sesión a mitad de una solicitud; la marca «Tu plan actual» se perdía mientras había otra solicitud en revisión; y un aviso de límite de correos que decía «en una hora» sin ser exacto.
 - **Lo que NO se pudo probar desde aquí:** tu Supabase real y su PostgREST real (todo se probó contra PostgreSQL local con el mismo esquema y un simulador de PostgREST), **el envío real de correos con Gmail** (ni cómo los muestra tu aplicación de correo), y un teléfono físico (se revisó a 360–390 px).
 
-**Límite importante del plan gratuito de Supabase:** su servicio de correo de cortesía solo envía a los correos de tu equipo y a un máximo de 2 por hora. Para que cualquier persona pueda registrarse hará falta un SMTP propio. **Sin dominio** (decisión actual) no sirven Resend ni Brevo; la opción gratuita viable es una cuenta de Gmail exclusiva del proyecto con contraseña de aplicación (Paso 4 de `GUIA_ETAPA_3.md`). **Decisión tomada en la Etapa 9: Gmail** para los correos de cuenta (confirmar y recuperar contraseña); sigue `GUIA_CORREOS_GMAIL.md`. Los **correos de notificación** (vacunas, citas, suscripción) todavía no existen: los avisos son solo dentro de la plataforma, y su envío por correo se replantearía con los topes de Gmail (500 al día) y de Supabase (30 por hora por defecto).
+**Terminado en la Etapa 10** (guía: `GUIA_ETAPA_10.md`)
+
+- **Panel de administración** (`admin.html`, 8 secciones) que usa **solo** las 28 funciones `admin_*` del servidor: cada una vuelve a comprobar el rol de administración (error «No autorizado.» si no lo eres) y deja una línea en la bitácora. Ocultar un botón nunca es la protección. Una cuenta que no es de administración solo ve «Acceso restringido».
+- **Usuarios:** búsqueda, ficha con solo datos de la cuenta y conteos (nunca el contenido de mascotas ni chats), suspender/reactivar con motivo (no a otro administrador) y asignar un plan a mano **sin cobro**. **Aliados:** aprobar, rechazar, suspender, regresar a revisión, «Aliado verificado» (solo aprobados) y retirar promociones con motivo; el panel no edita los datos del establecimiento. **Denuncias:** estado, prioridad, atendida, actualización pública (500) y notas internas (4000); el contenido original no se modifica; fotos de evidencia con enlaces firmados de 10 minutos que solo un administrador puede pedir; «canalizada» no significa denuncia oficial presentada. **Guías:** editor con borrador/publicación explícita, vista previa y borrado con confirmación; el contenido es texto (párrafos y `## ` para subtítulos), nunca HTML. **Suscripciones:** aprobar/rechazar solicitudes, renovar, cancelar y cambiar vencimiento, todo manual y sin cobro. **Atención:** bandeja del chat, responder como «Equipo TECNOPATITAS» (responder reabre una conversación cerrada), cerrar y reabrir; se actualiza sola cada 30/15 s sin perder lo que escribes. **Bitácora:** solo lectura, sin contenidos.
+- **Guías públicas** (`guias.html`): lista solo las publicadas, con búsqueda y categoría; un borrador no se puede leer ni adivinando la dirección (lo impone la base de datos).
+- Los avisos al equipo (campana) abren directamente la sección correspondiente del panel.
+- **Sin Gmail y sin confirmación de correo:** ver el párrafo «Correo y confirmación de cuenta» más abajo.
+
+**Cómo se probó la Etapa 10, con honestidad**
+
+- **735 pruebas de SQL** (132 nuevas: cada función `admin_*` rechaza a quien no es administrador, validaciones, bitácora sin contenidos, avisos, privacidad de la evidencia y de los borradores, permisos) y **37 comprobaciones** del verificador. **93 sabotajes** al SQL (quitar la comprobación de rol a cada función, abrir permisos o políticas a cualquier cuenta o a visitantes, guardar contenidos en la bitácora, saltarse validaciones…): **93 se detectan**.
+- **271 pruebas de navegador** en Chromium con **las mismas cabeceras CSP del sitio** (`pruebas-web/probar_admin.py`, 15 grupos, contra el simulador `mock_etapa10.py`, que traduce cada llamada `admin_*` a SQL real con el rol «authenticated» y las políticas RLS): estructura y seguridad de los archivos, control de acceso (visitante, dueño, aliado, suspendido; las 28 funciones rechazan a quien no es administrador aunque se llamen desde la consola), cada sección con sus acciones, doble clic y envíos simultáneos, errores del servidor y sesión vencida, texto hostil escrito como texto, actualización automática con reloj simulado, paginación, navegación y avisos del equipo, accesibilidad (teclado, nombres, contraste AA, objetivos táctiles de 44 px, textos largos sin desbordes a 390 px) y las guías públicas.
+- **135 «sabotajes» al código del panel, de las guías, del CSS y de `admin.html`: 130 se detectaron.** Los 5 restantes son equivalentes (cambian el código pero no lo que ve ni lo que guarda nadie: por ejemplo, el navegador y el servidor recortan el mismo texto, o un estilo que la tarjeta ya hereda). Los huecos que aparecieron durante la prueba se cerraron con comprobaciones más estrictas y se repitió el sabotaje hasta detectarlos.
+- **Dos errores reales que las pruebas encontraron y ya corregí:** (1) un nombre de establecimiento o un asunto del chat muy largo y sin espacios desbordaba la pantalla del panel; (2) en la página pública de guías, un título, resumen o fuente larguísimos y sin espacios se salían de la pantalla del teléfono.
+- Siguen pasando las regresiones de las Etapas 3 a 9.
+- **Lo que NO se pudo probar desde aquí:** tu Supabase real y su PostgREST/Storage reales (todo se probó contra PostgreSQL local con el mismo esquema y un simulador), el interruptor «Confirm email» de tu Supabase, la consulta para restablecer una contraseña desde el SQL Editor y un teléfono físico (se revisó a 360–390 px).
+
+**Correo y confirmación de cuenta (decisión del 4 de noviembre de 2026):** Gmail **ya no se usa** (su guía y las plantillas se conservan, marcadas «no se usa por ahora») y la **confirmación de correo se desactiva** (la apagas tú en Supabase: `GUIA_ETAPA_10.md`, Paso 3). Consecuencias: nadie comprueba que el correo sea de quien se registra, y **recuperar contraseña por correo no llega a personas normales** (el correo de cortesía de Supabase solo escribe a tu equipo, máximo 2 por hora); mientras no haya un SMTP propio, el equipo restablece accesos desde el SQL Editor.
 
 **No terminado (y no finge estarlo)**
 
-- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados, denuncias anónimas, chat de atención y notificaciones. **Todavía no:** el panel de administración (sigue mostrando «se conecta en la Etapa 10» y no guarda nada). No publiques datos reales todavía.
-- **Aprobar aliados, aprobar o rechazar solicitudes de plan y asignar planes** todavía se hace con SQL (`GUIA_ETAPA_5.md` y `GUIA_ETAPA_9.md`); el panel de administración llega en la Etapa 10. Hasta entonces ningún aliado aparece en el directorio sin que tú lo apruebes.
+- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados, denuncias anónimas, chat de atención y notificaciones. El panel de administración ya está conectado (Etapa 10). **Aún no publiques datos reales:** faltan la privacidad y los términos (Etapa 11).
+- **Aprobar aliados, resolver solicitudes de plan y asignar planes** se hace desde el panel (`admin.html`); el SQL de `GUIA_ETAPA_5.md` y `GUIA_ETAPA_9.md` sigue funcionando. Ningún aliado aparece en el directorio sin que un administrador lo apruebe.
 - **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. La persona **solicita** su plan (Etapa 9) y el equipo lo activa a mano, sin cargo; si algún día se habilitan pagos, será una decisión nueva y explícita. Los **recordatorios por WhatsApp o correo** están *previstos*, no activos: hoy los avisos de vacunas, desparasitaciones y citas llegan solo dentro de la plataforma (Notificaciones y campanita), cuando la persona entra al sitio.
 - **Faltan** eliminar la cuenta y el **aviso de privacidad y términos** (importante antes de recibir denuncias reales). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
-- **Responder el chat** también se hace con SQL hasta la Etapa 10 (consultas en `GUIA_ETAPA_7.md`); el chat no admite archivos adjuntos.
-- **Revisar y responder las denuncias** se hace con SQL hasta el panel de administración (Etapa 10; consultas en `GUIA_ETAPA_6.md`). Cuando llega una denuncia, el equipo recibe un aviso dentro de la plataforma (solo con el código, el tipo y el estado: nunca datos de quien denuncia); el botón «Ver» de ese aviso abre `admin.html`, que sigue pendiente (Etapa 10). Las evidencias se borran a mano.
+- **Responder el chat** se hace desde el panel (Atención); el chat no admite archivos adjuntos.
+- **Revisar y responder las denuncias** se hace desde el panel (Denuncias). Cuando llega una denuncia, el equipo recibe un aviso dentro de la plataforma (solo con el código, el tipo y el estado: nunca datos de quien denuncia); el botón «Ver» de ese aviso abre `admin.html#denuncias`, que sigue pendiente (Etapa 10). Las evidencias se borran a mano.
 - **Los datos de autoridades de la página de denuncias** (fiscalía, autoridad de protección animal, PROFEPA) son orientativos y la propia página dice que se verificarán: **confírmalos antes de abrir el sitio al público**.
 - **Limpieza de archivos:** al reemplazar o quitar una foto, o eliminar una mascota, el navegador borra los archivos viejos; si se corta la conexión justo en ese momento puede quedar algún archivo huérfano (ocupa espacio, nadie lo ve). Está acotado por los topes por persona; una limpieza automática periódica se valorará en la Etapa 11.
 - **La foto de la placa QR es pública** (bucket `qr-photos`, solo para quien la elige) y cualquiera que tenga su dirección exacta puede verla; las demás fotos son privadas.
@@ -172,7 +190,7 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 index.html  registro.html  login.html  recuperar.html  nueva-contrasena.html
 guias.html  directorio.html  denuncias.html  planes.html  sobre-nosotros.html
 perfil.html  mascota.html  carnet.html  qr.html (página pública de la placa)
-notificaciones.html  chat.html  panel-aliado.html  admin.html
+notificaciones.html  chat.html  panel-aliado.html  admin.html (panel de administración)
 css/styles.css        estilos compartidos (la paleta de colores está al inicio, en `:root`)
 js/config.js          URL y clave publishable de Supabase (públicas; NUNCA la secret)
 js/tp-client.js       cliente de Supabase Auth/REST/Storage sin dependencias (Etapas 3 y 4)
@@ -188,8 +206,11 @@ js/pages/             lógica de cada página: registro, login, recuperar, nueva
                       mascota, carnet, placa (en carnet.html), qr-publico, directorio y panel-aliado
                       (panel-aliado.js + un módulo por sección: panel-datos, -fotos, -horarios, -promos, -stats)
                       denuncias (formulario anónimo + seguimiento), chat (lista, hilo y mensajes en vivo)
-                      y notificaciones (lista, filtros, preferencias; la campanita vive en layout.js)
+                      y notificaciones (lista, filtros, preferencias; la campanita vive en layout.js),
+                      guias (lista pública y lectura) y el panel de administración (admin.js + un módulo por sección:
+                      admin-usuarios, -aliados, -denuncias, -guias, -subs, -atencion, -bitacora)
 js/tp-realtime.js     cliente mínimo de Supabase Realtime (WebSocket), usado por el chat
+js/tp-guides.js      ayudas de las guías de cuidado (categorías, dirección, texto → párrafos) para guias.html y el editor del panel
 js/plans.js           catálogo de planes (fijo, igual a la base), selector mensual/anual y tarjetas
                       (la pantalla con sesión de Suscripciones es js/pages/planes.js)
 _headers              cabeceras HTTP y CSP (Cloudflare Pages)
@@ -201,7 +222,8 @@ GUIA_ETAPA_6.md       pasos manuales de la Etapa 6 (Turnstile, función segura, 
 GUIA_ETAPA_7.md       pasos manuales de la Etapa 7 (actualizar SQL, responder el chat con SQL) y lista de pruebas
 GUIA_ETAPA_8.md       pasos manuales de la Etapa 8 (actualizar SQL, crear notificaciones de prueba) y lista de pruebas en tu sitio
 GUIA_ETAPA_9.md       pasos manuales de la Etapa 9 (actualizar SQL, aprobar o rechazar solicitudes de plan con SQL) y lista de pruebas
-GUIA_CORREOS_GMAIL.md Gmail como servicio de correo de las cuentas (confirmar y recuperar contraseña), paso a paso
+GUIA_ETAPA_10.md      pasos manuales de la Etapa 10 (actualizar SQL, desactivar la confirmación de correo, dar el rol de administración) y lista de pruebas
+GUIA_CORREOS_GMAIL.md Gmail como correo de las cuentas, paso a paso (NO SE USA POR AHORA; se conserva por si más adelante hay SMTP propio)
 supabase/plantillas-correo/  plantillas en español de «Confirm sign up» y «Reset password» para pegar en Supabase
 supabase/functions/   función segura submit-complaint (Edge Function; se pega en el editor de Supabase)
 database/             Etapa 2: SQL de la base de datos (ver abajo)
@@ -209,8 +231,8 @@ pruebas-web/          pruebas de navegador con simuladores de Supabase (solo des
                       probar_acceso.py (Etapa 3), probar_mascotas.py y probar_qr.py (Etapa 4),
                       probar_aliados.py (Etapa 5), probar_denuncias.py y probar_funcion.py (Etapa 6),
                       probar_chat.py (Etapa 7), probar_notificaciones.py (Etapa 8),
-                      probar_planes.py y probar_correos.py (Etapa 9);
-                      simuladores mock_supabase.py, mock_etapa4.py … mock_etapa9.py;
+                      probar_planes.py y probar_correos.py (Etapa 9), probar_admin.py (Etapa 10);
+                      simuladores mock_supabase.py, mock_etapa4.py … mock_etapa10.py;
                       servidor_funcion.mjs ejecuta el código real de la función segura con Node
 ```
 
@@ -222,7 +244,7 @@ pruebas-web/          pruebas de navegador con simuladores de Supabase (solo des
 | `00_instalar_todo.sql` | Todo junto (01 a 05) para pegarlo de una vez. Se puede ejecutar varias veces |
 | `01_esquema.sql` … `05_datos_base.sql` | Las partes: tablas · funciones · permisos (RLS) · archivos · planes |
 | `06_datos_demo.sql` | Opcional: 6 aliados ficticios y 8 guías generales de ejemplo |
-| `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (35 comprobaciones) |
+| `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (37 comprobaciones) |
 | `construir_instalador.sh` | Regenera `00_instalar_todo.sql` si editas 01–05 |
 | `pruebas/` | Batería de pruebas y simulador de Supabase (solo para desarrollo local) |
 
@@ -243,7 +265,7 @@ Los colores de la marca son **menta `#80E3B9`**, **lavanda `#C0B8E8`**, **azul c
 
 Desde la Etapa 3 hay que servir la carpeta (con doble clic en el archivo no funcionan las sesiones): `python3 -m http.server 8000` y entra a `http://localhost:8000`. Para que los correos de confirmación regresen ahí, añade `http://localhost:8000/**` en *Authentication → URL Configuration → Redirect URLs* (Paso 2 de `GUIA_ETAPA_3.md`).
 
-**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`), `python3 pruebas-web/probar_chat.py` (Etapa 7) `python3 pruebas-web/probar_notificaciones.py` (Etapa 8), `python3 pruebas-web/probar_planes.py` (Etapa 9; estas tres requieren PostgreSQL local y las mismas variables) y `python3 pruebas-web/probar_correos.py` (plantillas de correo) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
+**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`), `python3 pruebas-web/probar_chat.py` (Etapa 7) `python3 pruebas-web/probar_notificaciones.py` (Etapa 8), `python3 pruebas-web/probar_planes.py` (Etapa 9) y `python3 pruebas-web/probar_admin.py` (Etapa 10; estas cuatro requieren PostgreSQL local y las mismas variables) y `python3 pruebas-web/probar_correos.py` (plantillas de correo) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
 
 ## Publicar esta etapa (opcional, gratis)
 
@@ -328,8 +350,8 @@ Consecuencias para el diseño:
 5. **Tope de 200 por persona** con limpieza automática (leídas de más de 90 días y todo lo de más de 365).
 6. **Chat → equipo: un aviso por turno**, para no saturar al equipo ni llenar la base.
 7. **El aviso de respuesta del equipo lleva un adelanto de 140 caracteres** (solo lo ve su dueña). Si prefieres un texto genérico, se cambia.
-8. **Correos y WhatsApp: no existen todavía.** El interruptor de correo está bloqueado hasta que decidas el SMTP (cuenta de Gmail exclusiva del proyecto, o solo avisos dentro de la plataforma).
-9. **El botón «Ver» de los avisos al equipo abre `admin.html`**, que es una página pendiente hasta la Etapa 10; el equipo sigue respondiendo y revisando denuncias con SQL.
+8. **Correos y WhatsApp: no existen todavía.** El interruptor de correo sigue bloqueado: se decidió no usar Gmail por ahora (Etapa 10) y no hay SMTP propio, así que los avisos viven solo dentro de la plataforma.
+9. **El botón «Ver» de los avisos al equipo abre `admin.html` en la sección correspondiente** (conectado en la Etapa 10).
 
 ## Decisiones de la Etapa 9 que conviene confirmar
 
@@ -340,9 +362,22 @@ Consecuencias para el diseño:
 5. **Aviso de vencimiento al visitar el sitio** (7 días antes y hasta 30 después), sin tareas programadas ni `pg_cron`; si la persona no entra, no se entera hasta que entre.
 6. **El catálogo de planes está fijo en `js/plans.js`** (los visitantes no hacen peticiones a Supabase); una prueba automática lo compara con la base. Si cambias precios o beneficios en la base, cámbialos también ahí.
 7. **Las cuentas de aliado ahora también piden la generación diaria de avisos** (cambio respecto a la Etapa 8).
-8. **Las cuentas de administración se comportan como dueñas** en esta pantalla (ven y piden sus propios planes, no los de otras personas); la gestión llegará en la Etapa 10 con `admin_resolve_plan_request`.
-9. **Gmail solo para correos de cuenta.** Para el envío de avisos por correo habría que decidir aparte (límites de Gmail y de Supabase).
+8. **Las cuentas de administración se comportan como dueñas** en esta pantalla (ven y piden sus propios planes, no los de otras personas); la gestión se hace en el panel (Etapa 10) con `admin_resolve_plan_request`.
+9. **Gmail solo para correos de cuenta.** *(Decisión revocada en la Etapa 10: Gmail ya no se usa por ahora.)*
 
-## Siguiente: Etapa 10 (panel de administración)
+## Decisiones de la Etapa 10 que conviene confirmar
 
-Panel con botones para aprobar aliados, aprobar o rechazar solicitudes de plan, atender el chat y revisar denuncias, usuarios y bitácora. Antes, completa y prueba la Etapa 9 con `GUIA_ETAPA_9.md` (y los correos con `GUIA_CORREOS_GMAIL.md`). No avanzo a la Etapa 10 hasta que me lo pidas.
+1. **Los administradores solo se crean desde el SQL Editor.** El panel no puede dar ni quitar el rol, ni suspender a otro administrador.
+2. **El panel no edita establecimientos:** cambia su estado y la verificación y retira promociones; los datos los corrige su dueño.
+3. **Retirar una promoción la borra** (sin «ocultar»); el dueño recibe el motivo.
+4. **Responder en una conversación cerrada la reabre.**
+5. **Atención se actualiza por consulta (30 s la bandeja, 15 s la conversación)**, no con Realtime; se pausa con la pestaña oculta.
+6. **La bitácora crece sin límite** (una fila por acción, sin contenidos); hoy no se limpia sola.
+7. **Las guías públicas ya están conectadas.** Formato del contenido: párrafos y `## ` para subtítulos; las guías de demostración siguen marcadas como pendientes de revisión veterinaria.
+8. **Las fechas de vencimiento que eliges en el panel terminan a las 23:59:59 de México (UTC−6).**
+9. **Sin Gmail y sin confirmación de correo (decisión tuya):** cualquiera puede registrarse con un correo ajeno y la recuperación de contraseña por correo no llega a personas normales; mientras tanto el equipo restablece accesos desde el SQL Editor (`GUIA_ETAPA_10.md`, Paso 3). `recuperar.html` lo dice con honestidad.
+10. **Un enlace `admin.html#seccion` abierto sin sesión** lleva al inicio de sesión y vuelve al panel, pero no recuerda la sección.
+
+## Siguiente: Etapa 11 (publicación)
+
+Revisión final, aviso de privacidad y términos, eliminar la cuenta, guías revisadas por un veterinario y la lista de pendientes antes de abrir el sitio al público. Antes, completa y prueba la Etapa 10 con `GUIA_ETAPA_10.md`. No avanzo a la Etapa 11 hasta que me lo pidas.

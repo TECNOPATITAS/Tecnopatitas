@@ -4,7 +4,7 @@ Esta etapa convierte `planes.html` en la pantalla de **Suscripciones** de verdad
 
 > Los menús de Supabase y GitHub cambian de nombre con frecuencia. Si algo no coincide con lo que ves, busca el texto entre comillas con el buscador del panel, o mándame una captura (sin claves visibles).
 
-Tiempo estimado: 30–40 minutos. **No hay cuentas nuevas ni claves que pegar en esta etapa.** (La configuración de Gmail para los correos de cuenta va aparte, en `GUIA_CORREOS_GMAIL.md`, y no depende de esta etapa.)
+Tiempo estimado: 30–40 minutos. **No hay cuentas nuevas ni claves que pegar en esta etapa.** (La configuración de Gmail para los correos de cuenta iba aparte, en `GUIA_CORREOS_GMAIL.md`; **desde la Etapa 10 ya no se usa**: ver `GUIA_ETAPA_10.md`.)
 
 **Reglas que siguen vigentes:**
 
@@ -19,7 +19,7 @@ Tiempo estimado: 30–40 minutos. **No hay cuentas nuevas ni claves que pegar en
 1. **Solicitar.** En `planes.html`, con sesión iniciada, cada plan de pago de tu tipo de cuenta tiene el botón **«Solicitar este plan»**. Al pulsarlo se abre un formulario con el periodo (mensual o anual) y un mensaje opcional de hasta 300 caracteres. **Una persona solo puede tener una solicitud en revisión a la vez**, y un máximo de **5 solicitudes al día**.
 2. **Quién puede pedir qué.** Las cuentas de dueño piden Huellita Pro o VIP; las de aliado piden Plata u Oro. Huellita Básica es gratuita y no se solicita. Las cuentas suspendidas no pueden solicitar. **El servidor lo comprueba siempre**: si alguien manipula la página, la base de datos rechaza la solicitud.
 3. **Qué pasa al solicitar.** La persona recibe una notificación («Recibimos tu solicitud…»), y **todo el equipo** recibe «Nueva solicitud de plan» con el plan, el periodo, el tipo de cuenta y un **código de 8 caracteres**. El aviso al equipo **no incluye** el correo, el nombre ni el mensaje de la persona.
-4. **La respuesta la da el equipo desde el SQL Editor** (ver «Cómo aprobar o rechazar» abajo; en la Etapa 10 habrá botones en el panel de administración). **Aprobar** activa el plan, con vigencia de **1 mes** (mensual) o **1 año** (anual) desde ese momento, y avisa a la persona («Tu suscripción cambió»). **Rechazar** avisa con la nota del equipo. La persona ve la respuesta en su historial.
+4. **La respuesta la da el equipo desde el SQL Editor** (ver «Cómo aprobar o rechazar» abajo; **desde la Etapa 10 puedes hacerlo con botones en `admin.html` → Suscripciones**, y el SQL de abajo sigue funcionando). **Aprobar** activa el plan, con vigencia de **1 mes** (mensual) o **1 año** (anual) desde ese momento, y avisa a la persona («Tu suscripción cambió»). **Rechazar** avisa con la nota del equipo. La persona ve la respuesta en su historial.
 5. **Renovar.** Cuando faltan **15 días o menos** para que venza su plan, aparece **«Solicitar renovación»**. Aprobarla **extiende la misma suscripción** (no crea otra). Antes de eso, el servidor rechaza la petición con una explicación.
 6. **Cambiar de plan** (por ejemplo de Pro a VIP) es otra solicitud; al aprobarla, el plan anterior queda como reemplazado. Solo hay un plan activo por persona.
 7. **Cancelar suscripción.** Dos pasos (botón y confirmación). El plan se pierde **de inmediato** y se vuelve a Huellita Básica. No hay reembolsos porque nunca hubo cobro. Una solicitud en revisión no se toca.

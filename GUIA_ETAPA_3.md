@@ -38,7 +38,7 @@ El sitio ya exige **10 caracteres como mínimo** al registrarse, pero eso es sol
 
 ## Paso 4 · Correos: la limitación real del plan gratuito (**léelo**)
 
-> **Actualización (Etapa 9):** ya elegiste Gmail. La versión completa y actualizada de este paso (límites, contraseña de aplicación, plantillas en español, pruebas y fallos comunes) está en **`GUIA_CORREOS_GMAIL.md`**. Sigue esa guía; lo de abajo queda como contexto.
+> **Actualización (Etapa 10):** en la Etapa 9 elegiste Gmail, pero el 4 de noviembre de 2026 **decidiste no usarlo por ahora y desactivar la confirmación de correo**. Qué hacer y qué consecuencias tiene está en **`GUIA_ETAPA_10.md` (Paso 3)**. La guía de Gmail (`GUIA_CORREOS_GMAIL.md`) se conserva marcada como «no se usa por ahora»; lo de abajo queda como contexto.
 
 Supabase trae un servicio de correo de cortesía **solo para probar**, con dos límites:
 

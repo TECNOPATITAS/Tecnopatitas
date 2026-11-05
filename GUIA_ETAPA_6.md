@@ -197,7 +197,9 @@ Borrar las filas **no** borra las fotos. Hazlo en este orden:
 
 ## Cómo revisa el administrador las denuncias (hasta la Etapa 10)
 
-El panel de administración llega en la Etapa 10. Mientras, desde **SQL Editor**:
+> **Actualización (Etapa 10):** ya puedes revisar y dar seguimiento a las denuncias desde `admin.html` → Denuncias (estado, prioridad, actualización pública, notas internas y fotos de evidencia). El SQL de abajo sigue funcionando.
+
+Si prefieres o necesitas hacerlo desde **SQL Editor**:
 
 **Ver las denuncias pendientes** (las más nuevas primero):
 
@@ -271,7 +273,7 @@ update public.complaints
 
 - **No presenta denuncias ante autoridades**: solo las registra para revisión del equipo. Para una denuncia oficial, la persona debe acudir a la fiscalía o a la autoridad de protección animal de su estado o municipio (y llamar al 911 si hay peligro inmediato). El texto con las autoridades en la página dice que se verificará antes de publicar la versión final: **confirma esos datos** antes de abrir el sitio al público.
 - **No garantiza anonimato técnico absoluto** frente a todos los proveedores de infraestructura (Supabase, Cloudflare): la página lo advierte. Lo que sí garantiza es que **TECNOPATITAS no guarda nada que identifique** a quien reporta.
-- **Panel de administración:** hasta la Etapa 10, el equipo revisa y responde con SQL (sección anterior).
+- **Panel de administración:** *(Etapa 10: ya existe en `admin.html`; el SQL de la sección anterior sigue siendo válido).*
 - **Avisos por correo o notificación** al llegar un reporte: llegan con las notificaciones (Etapa 8); nunca se afirma que se envió algo que no se envió.
 - **Limpieza automática** de evidencias: se borran a mano (arriba).
 

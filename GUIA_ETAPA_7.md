@@ -62,7 +62,9 @@ La Etapa 7 añade a la base: la función `start_conversation`, los límites diar
 
 ## Cómo responde el equipo hasta la Etapa 10
 
-El panel de administración llega en la Etapa 10. Mientras, el equipo lee y responde desde **SQL Editor** de Supabase (ahí actúas con permisos de servidor; por eso estas consultas **nunca** van en el sitio ni se comparten).
+> **Actualización (Etapa 10):** ya puedes leer y responder desde `admin.html` → Atención (con botones, sin SQL). Lo de abajo sigue funcionando.
+
+Si prefieres o necesitas hacerlo así, el equipo lee y responde desde **SQL Editor** de Supabase (ahí actúas con permisos de servidor; por eso estas consultas **nunca** van en el sitio ni se comparten).
 
 **1. Ver las conversaciones que esperan respuesta** (las más antiguas primero):
 

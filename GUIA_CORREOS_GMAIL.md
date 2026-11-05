@@ -1,6 +1,12 @@
 # Correos de cuenta con Gmail (confirmar cuenta y recuperar contraseña)
 
-Decisión tomada: **Gmail será el servicio de correo con el que las personas crean y recuperan su cuenta.** Sin dominio propio y sin gastar dinero.
+> ## ⏸️ NO SE USA POR AHORA
+>
+> El **4 de noviembre de 2026** se decidió **no usar Gmail** como servicio de correo y **desactivar la confirmación de correo** (ver `GUIA_ETAPA_10.md`, Paso 3). Esta guía, las plantillas de `supabase/plantillas-correo/` y sus pruebas **se conservan** por si más adelante quieres enviar correos de cuenta (confirmar y recuperar contraseña) con un SMTP propio. **No necesitas hacer nada de lo que sigue mientras la confirmación esté desactivada.**
+>
+> Mientras tanto, la recuperación de contraseña por correo **no llega a personas normales** (el correo de cortesía de Supabase solo escribe a tu equipo). Qué hacer en ese caso: `GUIA_ETAPA_10.md`, Paso 3.
+
+Decisión que se tomó en la Etapa 9 (y que **ya no está vigente**, ver arriba): **Gmail como servicio de correo con el que las personas crean y recuperan su cuenta.** Sin dominio propio y sin gastar dinero.
 
 **Qué cubre esta guía:** únicamente los correos que envía **Supabase Auth**: *confirmar cuenta* y *recuperar contraseña*.
 **Qué NO cubre:** los avisos de la plataforma (vacunas, citas, suscripción…) **siguen viviendo solo dentro del sitio** (campanita y Notificaciones). Todavía no se envía ningún otro correo, y el interruptor de «recordatorios por correo» sigue bloqueado.

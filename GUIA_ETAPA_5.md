@@ -52,6 +52,8 @@ Si creas una cuenta nueva desde **Authentication → Users → Add user → Crea
 
 ### SQL que usarás durante las pruebas
 
+> **Actualización (Etapa 10):** aprobar, rechazar, suspender, verificar aliados y asignar planes ya se puede hacer con botones en `admin.html`. Este SQL sigue siendo válido (y útil si el panel no estuviera disponible).
+
 Cada bloque se pega en **SQL Editor → New query → Run**. Cambia los correos y los nombres por los tuyos. Todos se pueden repetir sin error.
 
 **Ver los establecimientos pendientes de aprobación:**
@@ -183,7 +185,7 @@ Usa una foto real del celular (suelen pesar 3–8 MB) para ver que se reduce.
 
 **No hace todavía**
 
-- **Aprobar, rechazar, suspender, verificar y asignar planes desde una pantalla:** hoy se hace con SQL; el panel de administración llega en la Etapa 10.
+- **Aprobar, rechazar, suspender, verificar y asignar planes desde una pantalla:** *(actualización de la Etapa 10: ya existe, en `admin.html` → Aliados y Usuarios; el SQL de esta guía sigue funcionando)*.
 - **Contratar o pagar** un plan: no está habilitado y no se guarda ningún dato financiero. La «difusión en redes sociales» del plan Oro es una acción manual futura, no automática.
 - **Avisos al aliado** cuando su ficha es aprobada o suspendida (llegan con las notificaciones, Etapa 8).
 - **Mapa incrustado:** solo enlaces a Google Maps.
