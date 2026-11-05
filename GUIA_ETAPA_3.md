@@ -136,7 +136,7 @@ Para borrar cuentas de prueba: **Authentication → Users →** (menú `…` de 
 
 - **Las protecciones de páginas en el navegador son solo comodidad.** Quien salte ese código no obtiene datos: lo que protege la información son las políticas RLS de la Etapa 2.
 - **Subir foto de perfil**: se activa en la Etapa 4 junto con las demás subidas de archivos.
-- **Eliminar la cuenta** y **aviso de privacidad / términos**: faltan. Antes de abrir el sitio a personas reales hay que añadirlos (Etapa 11 como muy tarde).
+- **Eliminar la cuenta** y **aviso de privacidad / términos**: se añadieron en la Etapa 11 (`GUIA_ETAPA_11.md`).
 - **Anti-robots (Cloudflare Turnstile, gratis)** en el registro: se añade junto con denuncias (Etapa 6); mientras tanto Supabase aplica sus límites de peticiones.
 - **Correos para cualquier persona**: depende del Paso 4.
 - **Contratación de planes y cobros: no están habilitados.** No se pide ni se guarda ningún dato de tarjeta.

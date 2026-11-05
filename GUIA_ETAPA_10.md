@@ -155,4 +155,4 @@ Usa **tu cuenta de administración** y, en una ventana de incógnito, **una cuen
 
 ## Qué sigue
 
-**Etapa 11 · Publicación** (revisión final, aviso de privacidad y términos, eliminar cuenta, guías revisadas por un veterinario, lista de pendientes antes de abrir al público). No la empiezo hasta que pruebes esta etapa y me lo pidas.
+**Etapa 11 · Seguridad final y publicación** (aviso de privacidad y términos, eliminar cuenta, limpieza de la demostración, guías pendientes de revisión veterinaria y la lista de pendientes antes de abrir al público): sigue `GUIA_ETAPA_11.md`.

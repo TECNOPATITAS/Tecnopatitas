@@ -2,12 +2,12 @@
 
 Plataforma para el cuidado, protección y bienestar de las mascotas. Se construye **por etapas**; este archivo dice qué está terminado y qué no.
 
-## Estado actual: Etapa 10 de 11 (panel de administración)
+## Estado actual: Etapa 11 de 11 (seguridad final, textos legales y publicación)
 
 | Etapa | Contenido | Estado |
 |---|---|---|
 | 1 | Estructura, diseño y navegación | Terminada |
-| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4 a 10 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 37 comprobaciones |
+| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4 a 11 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 37 comprobaciones |
 | 3 | Registro, inicio de sesión, recuperar contraseña, sesión, roles y protección de páginas | Terminada y probada en tu sitio real |
 | 4 | Mascotas, carnet de salud digital, subida de fotos (Supabase Storage) y placa QR (Huellita VIP) | Terminada y probada en tu sitio real |
 | 5 | Directorio público y panel de aliados: alta del negocio, datos, logotipo y fotos, horarios, promociones, estadísticas y enlaces a Google Maps | Terminada y probada por ti |
@@ -16,7 +16,7 @@ Plataforma para el cuidado, protección y bienestar de las mascotas. Se construy
 | 8 | Notificaciones: pantalla con lista, filtros y preferencias, campanita con el número de no leídas, recordatorios de vacunas, desparasitaciones y citas, y avisos al equipo (denuncias y chat). Solo dentro de la plataforma: todavía no se envían correos ni WhatsApp | Escrita y probada contra simuladores (194 pruebas de navegador + 511 de SQL). Probar en tu sitio real: `GUIA_ETAPA_8.md` |
 | **9** | **Planes y suscripciones sin cobros: «Tu plan» con vigencia, solicitud de plan (o de renovación), cancelación, historial con la respuesta del equipo, avisos de vencimiento. El equipo aprueba o rechaza desde SQL y activa el plan a mano. Además, guía (y plantillas) para usar Gmail como correo de las cuentas, que desde la Etapa 10 ya no se usa** | **Escrita y probada contra simuladores (195 pruebas de navegador + 62 de plantillas de correo + 603 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_9.md` y `GUIA_CORREOS_GMAIL.md`** |
 | **10** | **Panel de administración (`admin.html`) conectado a la base de datos: resumen, usuarios (suspender/reactivar, asignar plan a mano), aliados (aprobar, rechazar, suspender, verificar, retirar promociones), denuncias (estado, prioridad, seguimiento público y notas internas, fotos de evidencia), guías de cuidado (editor con borradores y publicación), suscripciones y solicitudes de plan, atención al cliente (responder el chat) y bitácora. La página pública de guías (`guias.html`) ahora lee las guías publicadas. Sin Gmail y con la confirmación de correo desactivada (la desactivas tú en Supabase)** | **Escrita y probada contra simuladores (271 pruebas de navegador del panel + 735 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_10.md`** |
-| 11 | Publicación | Pendiente |
+| **11** | **Seguridad final y publicación: Aviso de privacidad y Términos y condiciones (con aceptación al registrarse y constancia de versión y fecha), eliminar la cuenta (con borrado de archivos), página 404, limpieza de los datos de demostración, auditoría automática de seguridad del sitio, datos de autoridades sin teléfonos sin verificar y lista de pendientes antes de abrir al público. Cobros: pospuestos, no habilitados** | **Escrita y probada contra simuladores (92 pruebas de navegador de la etapa + 770 de SQL + auditoría de 42 comprobaciones). Faltan tus pasos manuales y que revises los textos legales con una persona calificada: `GUIA_ETAPA_11.md`** |
 
 **Terminado en la Etapa 2** (carpeta `database/`)
 
@@ -27,7 +27,7 @@ Plataforma para el cuidado, protección y bienestar de las mascotas. Se construy
 - Chat, notificaciones, guías, directorio con filtros, placa QR con token aleatorio, bitácora de acciones de administración.
 - 6 buckets de archivos (solo JPG/PNG/WebP, con tope de tamaño y de cantidad por persona). El sexto, `qr-photos`, se añadió en la Etapa 4.
 - Datos de demostración **opcionales y claramente falsos** (`06_datos_demo.sql`).
-- 735 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5, 420 hasta la Etapa 6, 457 hasta la Etapa 7, 511 hasta la Etapa 8 y 603 hasta la Etapa 9) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
+- 770 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5, 420 hasta la Etapa 6, 457 hasta la Etapa 7, 511 hasta la Etapa 8, 603 hasta la Etapa 9 y 735 hasta la Etapa 10) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
 
 **Cómo se probó la Etapa 2, con honestidad**
 
@@ -167,22 +167,42 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 - Siguen pasando las regresiones de las Etapas 3 a 9.
 - **Lo que NO se pudo probar desde aquí:** tu Supabase real y su PostgREST/Storage reales (todo se probó contra PostgreSQL local con el mismo esquema y un simulador), el interruptor «Confirm email» de tu Supabase, la consulta para restablecer una contraseña desde el SQL Editor y un teléfono físico (se revisó a 360–390 px).
 
+**Terminado en la Etapa 11** (guía: `GUIA_ETAPA_11.md`)
+
+- **Aviso de privacidad (`privacidad.html`) y Términos y condiciones (`terminos.html`)**, públicos y enlazados en el pie de todas las páginas. Se redactaron según lo que el sitio **realmente hace**: qué datos pide, qué es público y qué no, con quién se comparten (Supabase, Cloudflare, Google Fonts), derechos ARCO, conservación y eliminación, menores, cookies y almacenamiento del navegador, y reglas de uso (aliados, reportes, planes **sin cobros**). **Los datos de quien responde (responsable, domicilio, contacto) los pone la persona dueña del sitio en `js/config.js` (`LEGAL`)**: vacíos por diseño; si faltan, las páginas muestran un aviso con lo que falta en lugar de inventarlos. **No sustituyen asesoría legal: hay que hacerlos revisar** (`GUIA_ETAPA_11.md`, Paso 4).
+- **Aceptación al registrarse:** casilla obligatoria (con la declaración de tener 18 años o más o contar con la autorización de madre, padre o tutor). La base guarda la **versión** (`AAAA-MM-DD`, de `js/legal.js`) y la **fecha y hora** de aceptación en `profiles.terms_version` / `terms_accepted_at`. Solo las escribe el servidor al crear la cuenta (y solo si la versión tiene formato válido); el navegador no puede cambiarlas.
+- **Eliminar mi cuenta (`perfil.html`):** contraseña + frase «ELIMINAR MI CUENTA»; el navegador borra primero los archivos de la persona con la API de Storage y después llama a `delete_my_account`, que elimina la cuenta y, en cascada, todo lo suyo. El servidor **se niega** si quedan archivos suyos, si la cuenta es de administración o si la frase no coincide. No se tocan las denuncias anónimas ni la bitácora. Con CAPTCHA activo, la verificación también se pide al cambiar la contraseña y al eliminar.
+- **`404.html`**, `noindex` en las pantallas de acceso, **`database/07_limpiar_demo.sql`** (borra solo la demostración y lista las guías pendientes de revisión) y **`opcional/mantener-activo.yml`** (flujo opcional y gratuito de GitHub contra la pausa del proyecto de Supabase; no hace nada mientras esté en esa carpeta).
+- **Auditoría automática del sitio** (`pruebas-web/auditar_sitio.py`, 42 comprobaciones): sin archivos `.env` ni claves, sin `innerHTML`/`eval` con datos, CSP cerrada, enlaces internos existentes, `rel="noopener"`, `alt`, etiquetas de formularios, políticas de indexación, funciones `SECURITY DEFINER` con `search_path` fijo y demostración separada.
+- **Datos de autoridades de denuncias:** sin teléfonos que no se pudieron verificar. La tarjeta dice «en una emergencia llama al 911», manda a la fiscalía o la autoridad de protección animal de **tu** estado o municipio y enlaza el sitio oficial de PROFEPA para fauna silvestre.
+- **`.env.example` y este README** documentan qué es público y qué es secreto, y cómo configurar y publicar.
+- **Cobros: pospuestos, no habilitados.** Sigue sin existir ninguna pantalla de pago.
+
+**Cómo se probó la Etapa 11, con honestidad**
+
+- **770 pruebas de SQL** (35 nuevas, grupo 13: constancia de términos —versión inventada, cuenta creada sin aceptar, cambio desde el navegador, restricción CHECK incluso para el dueño de la base—, permisos de `delete_my_account`, frase exacta en mayúsculas, administradores, archivos pendientes, cascada completa y lo ajeno intacto) y **37 comprobaciones** del verificador; el instalador se ejecutó sobre una base ya instalada y sobre una limpia. **21 sabotajes** al SQL (quitar el chequeo de administrador, de archivos o de sesión; borrar a todos o a nadie; aceptar cualquier frase o ignorar mayúsculas; abrir permisos a visitantes; no validar la versión de términos; dejar que el navegador la edite…): **los 21 se detectan**. Esa ronda dejó al descubierto **dos huecos de mis propias pruebas**: (1) el archivo de pruebas corre con los errores no fatales (para que una falla no detenga a las demás) y una inserción de preparación estaba mal escrita, así que la prueba de «se borra en cascada la solicitud de plan» comparaba contra datos que nunca existieron; ya está corregida, ahora hay una comprobación previa de que todo lo que debe desaparecer sí existía, y **el corredor de pruebas falla si hay cualquier error de SQL en la preparación** (se probó rompiendo una inserción a propósito); (2) un sabotaje (dar al navegador permiso de columna sobre la constancia) era frenado por un segundo seguro (el disparador de perfiles), así que se añadió una prueba que también verifica el primer seguro.
+- **92 pruebas de navegador** en Chromium con **las mismas cabeceras CSP del sitio** (`pruebas-web/probar_legal.py`, contra el simulador `mock_etapa11.py`, que traduce cada petición a SQL real con RLS): páginas legales (estructura, datos de `config.js` escritos como texto, aviso de datos faltantes, enlaces), aceptación al registrarse (sin casilla no se envía, versión enviada, texto hostil), eliminar la cuenta de punta a punta (contraseña incorrecta, frase, archivos borrados antes que la cuenta, cuenta de otra persona intacta, administrador, cuenta suspendida, doble clic, errores del servidor, sesión local cerrada), Turnstile en cambiar contraseña y eliminar, 404, indexación, pie de página y diseño de 390 px. **66 sabotajes** de la interfaz (no pedir la contraseña, no borrar archivos antes, olvidar un depósito, ignorar un fallo de Storage, no cerrar la sesión local, no reiniciar el token del anti-robots, mostrar datos legales como HTML…): **los 66 se detectan**, después de reforzar varias pruebas que al principio dejaban pasar sabotajes (por ejemplo, no se verificaba que se cerrara la sesión después de eliminar, ni cada dato de las páginas legales, ni el desbordamiento del menú lateral en el teléfono).
+- **Auditoría estática** (42 comprobaciones) con su propia **autoprueba** (17 casos que deben detectarse): `TODO` como identificador de código y la palabra «todo» en español daban falsos positivos y se acotó la búsqueda a marcas de trabajo pendiente.
+- Siguen pasando las regresiones de las Etapas 3 a 10 (navegador, función segura, códigos QR, plantillas de correo y SQL). Se actualizaron las expectativas del registro (la constancia de términos viaja en los metadatos).
+- **Errores reales que encontraron las pruebas y ya corregí:** (1) en Perfil los botones no respondían hasta que llegaba la consulta del plan (ahora esa consulta no bloquea); (2) con CAPTCHA activo, la nueva comprobación de contraseña al cambiarla o eliminar la cuenta habría fallado por no mandar el token (hay recuadro y token en ambas); (3) un mensaje largo y sin espacios ensanchaba la página en el teléfono; (4) botones de 31 px en Perfil en móvil (ahora 44 px); (5) un manejador de formularios sin uso en el pie, ya quitado; (6) el mini-catálogo de planes se armaba con `innerHTML` (ahora con construcción segura de elementos).
+- **Lo que NO se pudo probar desde aquí:** tu Supabase real (`delete from auth.users` dentro de la función y el borrado real de archivos con la API de Storage se probaron contra PostgreSQL local y un simulador), Turnstile real, el efecto de `404.html` en Cloudflare Pages, un teléfono físico, **y la validez legal de los textos** (necesitan revisión de una persona calificada). `GUIA_ETAPA_11.md` trae una lista de comprobaciones para tu sitio real.
+
 **Correo y confirmación de cuenta (decisión del 4 de noviembre de 2026):** Gmail **ya no se usa** (su guía y las plantillas se conservan, marcadas «no se usa por ahora») y la **confirmación de correo se desactiva** (la apagas tú en Supabase: `GUIA_ETAPA_10.md`, Paso 3). Consecuencias: nadie comprueba que el correo sea de quien se registra, y **recuperar contraseña por correo no llega a personas normales** (el correo de cortesía de Supabase solo escribe a tu equipo, máximo 2 por hora); mientras no haya un SMTP propio, el equipo restablece accesos desde el SQL Editor.
 
 **No terminado (y no finge estarlo)**
 
-- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados, denuncias anónimas, chat de atención y notificaciones. El panel de administración ya está conectado (Etapa 10). **Aún no publiques datos reales:** faltan la privacidad y los términos (Etapa 11).
+- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados, denuncias anónimas, chat de atención y notificaciones. El panel de administración ya está conectado (Etapa 10). Antes de publicar con personas reales, completa `GUIA_ETAPA_11.md` (datos legales, revisión de los textos, limpiar la demostración).
 - **Aprobar aliados, resolver solicitudes de plan y asignar planes** se hace desde el panel (`admin.html`); el SQL de `GUIA_ETAPA_5.md` y `GUIA_ETAPA_9.md` sigue funcionando. Ningún aliado aparece en el directorio sin que un administrador lo apruebe.
 - **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. La persona **solicita** su plan (Etapa 9) y el equipo lo activa a mano, sin cargo; si algún día se habilitan pagos, será una decisión nueva y explícita. Los **recordatorios por WhatsApp o correo** están *previstos*, no activos: hoy los avisos de vacunas, desparasitaciones y citas llegan solo dentro de la plataforma (Notificaciones y campanita), cuando la persona entra al sitio.
-- **Faltan** eliminar la cuenta y el **aviso de privacidad y términos** (importante antes de recibir denuncias reales). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
+- **Los textos legales necesitan revisión de una persona calificada** y tus datos de responsable, domicilio y contacto (`js/config.js`). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
 - **Responder el chat** se hace desde el panel (Atención); el chat no admite archivos adjuntos.
-- **Revisar y responder las denuncias** se hace desde el panel (Denuncias). Cuando llega una denuncia, el equipo recibe un aviso dentro de la plataforma (solo con el código, el tipo y el estado: nunca datos de quien denuncia); el botón «Ver» de ese aviso abre `admin.html#denuncias`, que sigue pendiente (Etapa 10). Las evidencias se borran a mano.
-- **Los datos de autoridades de la página de denuncias** (fiscalía, autoridad de protección animal, PROFEPA) son orientativos y la propia página dice que se verificarán: **confírmalos antes de abrir el sitio al público**.
-- **Limpieza de archivos:** al reemplazar o quitar una foto, o eliminar una mascota, el navegador borra los archivos viejos; si se corta la conexión justo en ese momento puede quedar algún archivo huérfano (ocupa espacio, nadie lo ve). Está acotado por los topes por persona; una limpieza automática periódica se valorará en la Etapa 11.
+- **Revisar y responder las denuncias** se hace desde el panel (Denuncias). Cuando llega una denuncia, el equipo recibe un aviso dentro de la plataforma (solo con el código, el tipo y el estado: nunca datos de quien denuncia); el botón «Ver» de ese aviso abre directamente la sección Denuncias del panel (`admin.html#denuncias`). Las evidencias se borran a mano.
+- **Datos de autoridades:** la página de denuncias es genérica a propósito (911, la fiscalía o la autoridad de protección animal de tu estado o municipio, y el sitio oficial de PROFEPA); no se publican teléfonos sin verificar. Si quieres datos locales concretos, pásame la fuente oficial (`GUIA_ETAPA_11.md`, Paso 7).
+- **Limpieza de archivos:** al reemplazar o quitar una foto, o eliminar una mascota, el navegador borra los archivos viejos; si se corta la conexión justo en ese momento puede quedar algún archivo huérfano (ocupa espacio, nadie lo ve). Está acotado por los topes por persona; no hay limpieza automática periódica (se puede revisar a mano en Storage).
 - **La foto de la placa QR es pública** (bucket `qr-photos`, solo para quien la elige) y cualquiera que tenga su dirección exacta puede verla; las demás fotos son privadas.
 - **El QR contiene la dirección del sitio** (hoy `…pages.dev`). Si algún día cambia la dirección, los QR impresos hay que reponerlos.
 - Las denuncias se **registran en la plataforma**; la plataforma no las presenta ante ninguna autoridad. Tampoco hay anonimato técnico absoluto frente a los proveedores de infraestructura (Supabase, Cloudflare): lo que se garantiza es que TECNOPATITAS no guarda nada que identifique a quien reporta.
-- Las guías y los aliados de la demostración son **contenido de ejemplo**. Las guías están marcadas «pendiente de revisión veterinaria» y deben revisarse antes de presentarlas como definitivas.
+- Las guías y los aliados de la demostración son **contenido de ejemplo**. Las guías están marcadas «pendiente de revisión veterinaria» y deben revisarse antes de presentarlas como definitivas (o despublicarse: `database/07_limpiar_demo.sql`, línea opcional).
 
 ## Estructura
 
@@ -191,8 +211,10 @@ index.html  registro.html  login.html  recuperar.html  nueva-contrasena.html
 guias.html  directorio.html  denuncias.html  planes.html  sobre-nosotros.html
 perfil.html  mascota.html  carnet.html  qr.html (página pública de la placa)
 notificaciones.html  chat.html  panel-aliado.html  admin.html (panel de administración)
+privacidad.html  terminos.html  404.html
 css/styles.css        estilos compartidos (la paleta de colores está al inicio, en `:root`)
-js/config.js          URL y clave publishable de Supabase (públicas; NUNCA la secret)
+js/config.js          URL y clave publishable de Supabase, tus datos legales (`LEGAL`) y la Site Key de Turnstile (todo público; NUNCA la secret)
+js/legal.js           versión y fecha vigentes del aviso de privacidad y los términos (se guarda al registrarse)
 js/tp-client.js       cliente de Supabase Auth/REST/Storage sin dependencias (Etapas 3 y 4)
 js/tp-ui.js           ayudas de formularios, fechas en español y construcción segura de elementos
 js/media.js           reduce y recodifica imágenes a JPEG (quita EXIF/GPS) antes de subirlas
@@ -207,14 +229,15 @@ js/pages/             lógica de cada página: registro, login, recuperar, nueva
                       (panel-aliado.js + un módulo por sección: panel-datos, -fotos, -horarios, -promos, -stats)
                       denuncias (formulario anónimo + seguimiento), chat (lista, hilo y mensajes en vivo)
                       y notificaciones (lista, filtros, preferencias; la campanita vive en layout.js),
-                      guias (lista pública y lectura) y el panel de administración (admin.js + un módulo por sección:
+                      legal (llena los datos del aviso con config.js), guias (lista pública y lectura) y el panel de administración (admin.js + un módulo por sección:
                       admin-usuarios, -aliados, -denuncias, -guias, -subs, -atencion, -bitacora)
 js/tp-realtime.js     cliente mínimo de Supabase Realtime (WebSocket), usado por el chat
 js/tp-guides.js      ayudas de las guías de cuidado (categorías, dirección, texto → párrafos) para guias.html y el editor del panel
 js/plans.js           catálogo de planes (fijo, igual a la base), selector mensual/anual y tarjetas
                       (la pantalla con sesión de Suscripciones es js/pages/planes.js)
 _headers              cabeceras HTTP y CSP (Cloudflare Pages)
-.env.example          solo para claves secretas futuras (Edge Functions)
+.env.example          documenta qué es público y qué es secreto (solo TURNSTILE_SECRET_KEY, que va en Supabase y no en el repositorio)
+opcional/             mantener-activo.yml: flujo opcional de GitHub contra la pausa de Supabase (no hace nada hasta que tú lo actives)
 GUIA_ETAPA_3.md       pasos manuales de la Etapa 3 y lista de pruebas en tu sitio
 GUIA_ETAPA_4.md       pasos manuales de la Etapa 4 y lista de pruebas en tu sitio
 GUIA_ETAPA_5.md       pasos manuales de la Etapa 5 (aprobar aliados, asignar planes) y lista de pruebas
@@ -223,6 +246,7 @@ GUIA_ETAPA_7.md       pasos manuales de la Etapa 7 (actualizar SQL, responder el
 GUIA_ETAPA_8.md       pasos manuales de la Etapa 8 (actualizar SQL, crear notificaciones de prueba) y lista de pruebas en tu sitio
 GUIA_ETAPA_9.md       pasos manuales de la Etapa 9 (actualizar SQL, aprobar o rechazar solicitudes de plan con SQL) y lista de pruebas
 GUIA_ETAPA_10.md      pasos manuales de la Etapa 10 (actualizar SQL, desactivar la confirmación de correo, dar el rol de administración) y lista de pruebas
+GUIA_ETAPA_11.md      pasos manuales de la Etapa 11 (datos legales, revisión de textos, limpiar la demostración, pausa de Supabase) y lista final antes de publicar
 GUIA_CORREOS_GMAIL.md Gmail como correo de las cuentas, paso a paso (NO SE USA POR AHORA; se conserva por si más adelante hay SMTP propio)
 supabase/plantillas-correo/  plantillas en español de «Confirm sign up» y «Reset password» para pegar en Supabase
 supabase/functions/   función segura submit-complaint (Edge Function; se pega en el editor de Supabase)
@@ -231,8 +255,9 @@ pruebas-web/          pruebas de navegador con simuladores de Supabase (solo des
                       probar_acceso.py (Etapa 3), probar_mascotas.py y probar_qr.py (Etapa 4),
                       probar_aliados.py (Etapa 5), probar_denuncias.py y probar_funcion.py (Etapa 6),
                       probar_chat.py (Etapa 7), probar_notificaciones.py (Etapa 8),
-                      probar_planes.py y probar_correos.py (Etapa 9), probar_admin.py (Etapa 10);
-                      simuladores mock_supabase.py, mock_etapa4.py … mock_etapa10.py;
+                      probar_planes.py y probar_correos.py (Etapa 9), probar_admin.py (Etapa 10),
+                      probar_legal.py (Etapa 11) y auditar_sitio.py (auditoría estática de todo el sitio);
+                      simuladores mock_supabase.py, mock_etapa4.py … mock_etapa11.py;
                       servidor_funcion.mjs ejecuta el código real de la función segura con Node
 ```
 
@@ -241,9 +266,10 @@ pruebas-web/          pruebas de navegador con simuladores de Supabase (solo des
 | Archivo | Para qué sirve |
 |---|---|
 | `GUIA_INSTALACION.md` | **Empieza aquí.** Pasos exactos para instalarlo en tu Supabase |
-| `00_instalar_todo.sql` | Todo junto (01 a 05) para pegarlo de una vez. Se puede ejecutar varias veces |
+| `00_instalar_todo.sql` | Todo junto (01 a 05; sin demostración) para pegarlo de una vez. Se puede ejecutar varias veces |
 | `01_esquema.sql` … `05_datos_base.sql` | Las partes: tablas · funciones · permisos (RLS) · archivos · planes |
 | `06_datos_demo.sql` | Opcional: 6 aliados ficticios y 8 guías generales de ejemplo |
+| `07_limpiar_demo.sql` | Etapa 11: borra solo los aliados ficticios antes de abrir al público (no toca cuentas ni datos reales) |
 | `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (37 comprobaciones) |
 | `construir_instalador.sh` | Regenera `00_instalar_todo.sql` si editas 01–05 |
 | `pruebas/` | Batería de pruebas y simulador de Supabase (solo para desarrollo local) |
@@ -265,16 +291,18 @@ Los colores de la marca son **menta `#80E3B9`**, **lavanda `#C0B8E8`**, **azul c
 
 Desde la Etapa 3 hay que servir la carpeta (con doble clic en el archivo no funcionan las sesiones): `python3 -m http.server 8000` y entra a `http://localhost:8000`. Para que los correos de confirmación regresen ahí, añade `http://localhost:8000/**` en *Authentication → URL Configuration → Redirect URLs* (Paso 2 de `GUIA_ETAPA_3.md`).
 
-**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`), `python3 pruebas-web/probar_chat.py` (Etapa 7) `python3 pruebas-web/probar_notificaciones.py` (Etapa 8), `python3 pruebas-web/probar_planes.py` (Etapa 9) y `python3 pruebas-web/probar_admin.py` (Etapa 10; estas cuatro requieren PostgreSQL local y las mismas variables) y `python3 pruebas-web/probar_correos.py` (plantillas de correo) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
+**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`), `python3 pruebas-web/probar_chat.py` (Etapa 7) `python3 pruebas-web/probar_notificaciones.py` (Etapa 8), `python3 pruebas-web/probar_planes.py` (Etapa 9) `python3 pruebas-web/probar_admin.py` (Etapa 10) y `python3 pruebas-web/probar_legal.py` (Etapa 11; estas cinco requieren PostgreSQL local y las mismas variables), `python3 pruebas-web/probar_correos.py` (plantillas de correo), `python3 pruebas-web/auditar_sitio.py` (auditoría estática de todo el sitio; no necesita base de datos) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL; falla si hay cualquier error de SQL en la preparación de las pruebas).
 
-## Publicar esta etapa (opcional, gratis)
+## Publicar el sitio (gratis)
 
 1. **GitHub:** crea una cuenta en <https://github.com/signup>, pulsa **New** para crear un repositorio (por ejemplo `tecnopatitas`), pulsa **uploading an existing file**, sube **el contenido** de esta carpeta (no la carpeta en sí) y confirma con **Commit changes**.
 2. **Cloudflare:** entra a <https://dash.cloudflare.com>, crea una cuenta gratuita y abre **Workers & Pages → Create → Pages → Connect to Git**. Elige tu repositorio.
 3. En la configuración de compilación deja **Build command** vacío y escribe `/` en **Build output directory**. Pulsa **Save and Deploy**.
 4. Cuando termine, Cloudflare te dará una URL `https://tu-proyecto.pages.dev`.
+5. **Configuración que se hace una sola vez, en archivos públicos del repositorio:** abre `js/config.js` y comprueba la URL y la clave *publishable* de tu Supabase, llena los datos de `LEGAL` (responsable, domicilio y contacto) y, si usas anti-robots, tu `TURNSTILE_SITE_KEY`. **Nunca** pongas ahí la clave `secret`/`service_role`, la contraseña de la base de datos ni la *Secret Key* de Turnstile: el sitio se niega a funcionar si detecta una clave secreta, y esas claves van solo como secretos de la función segura en el panel de Supabase (`GUIA_ETAPA_6.md`). No hay archivos `.env` que subir: `.env.example` solo documenta nombres.
+6. **Antes de abrir al público,** sigue la lista final de `GUIA_ETAPA_11.md` (SQL actualizado, textos legales revisados, demostración limpiada, administradora creada, pruebas en el sitio real).
 
-Los nombres de los menús de Cloudflare cambian con frecuencia; si algo no coincide, dime qué ves y lo ajustamos. No actives ningún plan de pago: no hace falta ninguno.
+Los nombres de los menús de Cloudflare cambian con frecuencia; si algo no coincide, dime qué ves y lo ajustamos. No actives ningún plan de pago ni registres tarjetas en Supabase, Cloudflare o GitHub: no hace falta ninguno. Cada subida a GitHub vuelve a publicar el sitio solo (500 compilaciones al mes en el plan gratuito).
 
 ## Límites gratuitos verificados (4 de noviembre de 2026)
 
@@ -287,7 +315,7 @@ Los nombres de los menús de Cloudflare cambian con frecuencia; si algo no coinc
 
 Consecuencias para el diseño:
 
-- **Pausa de Supabase:** para una demostración escolar es aceptable. Si el sitio se usa con personas reales, habrá que mantenerlo activo o aceptar que a veces se pause. Lo documentaremos en la Etapa 11.
+- **Pausa de Supabase:** para una demostración escolar es aceptable. Con personas reales, un proyecto con visitas diarias normalmente no se pausa; si habrá semanas sin visitas hay que mantenerlo activo o aceptar que se pause. Supabase avisa por correo (aproximadamente una semana antes), reactivarlo es gratis desde el panel (**Resume project**; su documentación dice que se puede restaurar hasta 1 año después de la pausa) y los datos se conservan. Opciones gratuitas y la explicación completa en `GUIA_ETAPA_11.md` (Paso 10), incluido el flujo opcional `opcional/mantener-activo.yml`.
 - **Correos:** con 100 al día, los recordatorios por correo se enviarán en lotes y con tope diario. Si se alcanza, se registrará como «no enviado» y nunca se mostrará como enviado.
 - **Fotos de denuncias:** 1 GB se agota rápido; cada reporte admite hasta 3 fotos de máximo 2 MB (ya reducidas, suelen pesar ~300 KB) y la función se niega a recibir más evidencias al llegar a 300 MB.
 - Los límites cambian con el tiempo. Se vuelven a comprobar antes de cada integración.
@@ -378,6 +406,16 @@ Consecuencias para el diseño:
 9. **Sin Gmail y sin confirmación de correo (decisión tuya):** cualquiera puede registrarse con un correo ajeno y la recuperación de contraseña por correo no llega a personas normales; mientras tanto el equipo restablece accesos desde el SQL Editor (`GUIA_ETAPA_10.md`, Paso 3). `recuperar.html` lo dice con honestidad.
 10. **Un enlace `admin.html#seccion` abierto sin sesión** lleva al inicio de sesión y vuelve al panel, pero no recuerda la sección.
 
-## Siguiente: Etapa 11 (publicación)
+## Decisiones de la Etapa 11 que conviene confirmar
 
-Revisión final, aviso de privacidad y términos, eliminar la cuenta, guías revisadas por un veterinario y la lista de pendientes antes de abrir el sitio al público. Antes, completa y prueba la Etapa 10 con `GUIA_ETAPA_10.md`. No avanzo a la Etapa 11 hasta que me lo pidas.
+1. **Registro: 18 años o más, o autorización de madre, padre o tutor** (declaración con casilla; no se verifica ni se guarda la edad de nadie). Si prefieres prohibir el registro de menores o exigir un procedimiento de autorización, cambian los textos y el flujo (y conviene asesoría legal).
+2. **La constancia guarda solo la versión y la fecha de aceptación**, no la IP. Al cambiar los textos de fondo, sube `VERSION` y `FECHA` en `js/legal.js`; las cuentas anteriores conservan la versión que aceptaron (no se les pide aceptar de nuevo: si lo quieres, es una pantalla nueva).
+3. **Eliminar la cuenta es inmediato y definitivo** (contraseña + frase), sin periodo de arrepentimiento. Las denuncias anónimas no se borran porque no están ligadas a la cuenta.
+4. **El servidor no vuelve a pedir la contraseña al eliminar** (lo hace el navegador). Una sesión robada más la frase podría borrar esa cuenta; las sesiones caducan. Si lo prefieres más estricto, hay que pasar por una función segura con la contraseña.
+5. **Las cuentas de administración no se eliminan desde Perfil.**
+6. **La demostración y las guías pendientes se limpian con un script que ejecutas tú** (no se borra nada en bloque ni automáticamente).
+7. **Riesgos aceptados y documentados:** CORS abierto en la función anónima `submit-complaint` (la protegen Turnstile y los límites), estilos en línea permitidos por la CSP (los scripts no), Google Fonts desde Google, y confirmación de correo desactivada (decisión de la Etapa 10).
+
+## Después de las 11 etapas
+
+Las 11 etapas del plan están escritas y probadas contra simuladores y bases locales; **falta tu parte**: los pasos de `GUIA_ETAPA_11.md` (datos legales, revisión de los textos por una persona calificada, limpiar la demostración, revisión veterinaria de las guías) y probar todo en tu sitio real. **Cobros y contratación de suscripciones: no habilitados** (pospuestos por decisión tuya). Si algún día se retoman, será una decisión nueva y explícita (proveedor, comisiones, obligaciones fiscales, revisión con una persona contadora) y no se activará nada que genere cargos automáticos.
