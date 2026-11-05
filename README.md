@@ -136,7 +136,7 @@ index.html  registro.html  login.html  recuperar.html  nueva-contrasena.html
 guias.html  directorio.html  denuncias.html  planes.html  sobre-nosotros.html
 perfil.html  mascota.html  carnet.html  qr.html (página pública de la placa)
 notificaciones.html  chat.html  panel-aliado.html  admin.html
-css/styles.css        estilos compartidos
+css/styles.css        estilos compartidos (la paleta de colores está al inicio, en `:root`)
 js/config.js          URL y clave publishable de Supabase (públicas; NUNCA la secret)
 js/tp-client.js       cliente de Supabase Auth/REST/Storage sin dependencias (Etapas 3 y 4)
 js/tp-ui.js           ayudas de formularios, fechas en español y construcción segura de elementos
@@ -183,6 +183,17 @@ pruebas-web/          pruebas de navegador con simuladores de Supabase (solo des
 | `pruebas/` | Batería de pruebas y simulador de Supabase (solo para desarrollo local) |
 
 Todas las rutas son relativas.
+
+## Paleta de colores
+
+Los colores de la marca son **menta `#80E3B9`**, **lavanda `#C0B8E8`**, **azul cielo `#92C1E9`** y **rosa `#FFCBD9`**. Se definen una sola vez, al inicio de `css/styles.css` (`--mn`, `--lv`, `--sk`, `--pk`), así que cambiarlos allí los cambia en todo el sitio.
+
+- **Menta:** botones principales, página actual en los menús, etiquetas, globos de tus mensajes en el chat e ícono del logotipo.
+- **Rosa:** botones de acción destacada (por ejemplo «Crear cuenta», «Enviar»), etiqueta «Más popular», números de los pasos, avisos de «todavía no conectado» y mensajes de error.
+- **Azul cielo:** encabezados de página (en degradado con la menta), al pasar el cursor por los menús y avisos informativos.
+- **Lavanda:** pie de página, ilustración de las pantallas de acceso y globos del equipo en el chat.
+- Para que el texto se lea bien (los pasteles no tienen contraste suficiente), **el texto va en azul marino oscuro** (`#1F2B4D`), y los fondos grandes y las líneas usan **versiones muy claras de los mismos cuatro colores**. Los mensajes de error usan texto vino oscuro sobre el rosa. Todas las combinaciones de texto y fondo superan el contraste mínimo de 4.5:1 (se midió en el navegador en las páginas públicas y en el chat).
+- Los códigos QR siguen siendo **negro sobre blanco** a propósito: es lo que mejor leen las cámaras.
 
 ## Probar en tu computadora
 

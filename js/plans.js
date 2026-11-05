@@ -8,7 +8,7 @@ const PLANS=[
 const mxn=n=>'$'+n.toLocaleString('es-MX')+' MXN';
 function renderPlans(sel,g,yearly){const el=document.querySelector(sel);if(!el)return;
 el.innerHTML=PLANS.filter(p=>p.g===g).map(p=>{const pr=yearly?p.a:p.m,ah=p.m*12-p.a,q=g?'tipo=aliado&':'';
-return `<article class="card${p.pop?' pop':''}">${p.pop?'<span class="tag" style="background:var(--co)">Más popular</span>':''}<h3>${p.n}</h3><small>${p.s}</small><div class="price">${mxn(pr)}<small>${pr?(yearly?' /año':' /mes'):' · gratis'}</small></div>${ah?`<small>Anual: ${mxn(p.a)} · ahorras ${mxn(ah)} al año frente a 12 pagos mensuales</small>`:''}<ul>${p.b.map(x=>'<li>'+x+'</li>').join('')}</ul><div class="row"><a class="btn coral" href="registro.html?${q}plan=${p.id}">${p.t}</a></div></article>`}).join('')}
+return `<article class="card${p.pop?' pop':''}">${p.pop?'<span class="tag" style="background:var(--pk)">Más popular</span>':''}<h3>${p.n}</h3><small>${p.s}</small><div class="price">${mxn(pr)}<small>${pr?(yearly?' /año':' /mes'):' · gratis'}</small></div>${ah?`<small>Anual: ${mxn(p.a)} · ahorras ${mxn(ah)} al año frente a 12 pagos mensuales</small>`:''}<ul>${p.b.map(x=>'<li>'+x+'</li>').join('')}</ul><div class="row"><a class="btn coral" href="registro.html?${q}plan=${p.id}">${p.t}</a></div></article>`}).join('')}
 const mini=document.querySelector('#plans-mini');
 if(mini)mini.innerHTML=PLANS.map(p=>`<a class="card" href="planes.html"><h3>${p.n}</h3><small>${p.g?'Aliados comerciales':'Dueños de mascotas'}</small><div class="price">${mxn(p.m)}<small>${p.m?' /mes':' · gratis'}</small></div></a>`).join('');
 if(document.querySelector('#pu')){let y=false;const go=()=>{renderPlans('#pu',0,y);renderPlans('#pb',1,y)};go();

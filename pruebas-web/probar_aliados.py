@@ -213,7 +213,7 @@ with sync_playwright() as pw:
     # --- búsqueda ---
     pg.fill('#d-q', 'estética'); waitjs(pg, "document.querySelectorAll('#d-lista article.biz').length===1")
     check('Buscar por nombre filtra (sin distinguir mayúsculas)', 'Estética Canina Plata' in dtext(pg) and cards(pg).count() == 1)
-    pg.fill('#d-q', ''); pg.select_option('#d-cat', 'tienda'); waitjs(pg, "document.querySelectorAll('#d-lista article.biz').length===1")
+    pg.fill('#d-q', ''); pg.select_option('#d-cat', 'tienda'); waitjs(pg, "document.querySelectorAll('#d-lista article.biz').length===1 && document.getElementById('d-lista').textContent.includes('Tienda Sin Plan')")
     check('Filtrar por categoría', 'Tienda Sin Plan' in dtext(pg))
     pg.select_option('#d-cat', ''); pg.fill('#d-q', 'zzzz'); waitjs(pg, "!!document.querySelector('#d-estado .empty')")
     check('Sin resultados: mensaje claro', 'No encontramos establecimientos' in txt(pg, '#d-estado') and cards(pg).count() == 0 and txt(pg, '#d-count') == '')
