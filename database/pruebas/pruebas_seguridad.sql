@@ -288,9 +288,13 @@ select t.eq('El carnet de Michi desapareció', null, 'service_role', $q$select c
 insert into public.pets (owner_id, name, species) select '{F}', 'm' || g, 'perro' from generate_series(1, 30) g;
 select t.ex('Máximo 30 mascotas por cuenta', '{F}', 'authenticated', $q$insert into public.pets (name, species) values ('de más', 'perro')$q$, 'ERR P0001%');
 select t.ex('D suspende a B', '{D}', 'authenticated', $q$select public.admin_set_user_suspended('{B}', true, 'prueba de abuso')$q$, 'OK rows=1');
+select t.eq('Suspender a una cuenta le deja un aviso dentro de la plataforma, con el motivo', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{B}' and title = 'Tu cuenta fue suspendida' and body = 'prueba de abuso'$q$, '1');
 select t.ex('Una cuenta suspendida NO puede crear mascotas', '{B}', 'authenticated', $q$insert into public.pets (name, species) values ('Bloqueada', 'gato')$q$, 'ERR 42501%');
 select t.ex('Una cuenta suspendida NO puede editar su perfil', '{B}', 'authenticated', $q$update public.profiles set display_name = 'x' where id = '{B}'$q$, 'OK rows=0');
 select t.ex('D reactiva a B', '{D}', 'authenticated', $q$select public.admin_set_user_suspended('{B}', false, 'resuelto')$q$, 'OK rows=1');
+select t.eq('Reactivarla también le avisa, con el motivo', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{B}' and title = 'Tu cuenta fue reactivada' and body = 'resuelto'$q$, '1');
 select t.ex('B reactivado puede crear mascotas de nuevo', '{B}', 'authenticated', $q$insert into public.pets (name, species) values ('Rocky', 'perro')$q$, 'OK rows=1');
 select t.eq('La suspensión y reactivación quedaron en la bitácora', '{D}', 'authenticated', $q$select count(*) from public.admin_audit_log where action in ('user_suspend', 'user_reactivate')$q$, '2');
 
@@ -392,6 +396,7 @@ select t.ex('Un admin tampoco cambia el estado con un UPDATE directo (solo por f
 select t.ex('D suspende el negocio por función', '{D}', 'authenticated', $q$select public.admin_set_business_status('{BIZ1}', 'suspended')$q$, 'OK rows=1');
 select t.eq('Suspender quita la verificación', null, 'service_role', $q$select verified::text from public.businesses where id = '{BIZ1}'$q$, 'false');
 select t.eq('Un negocio suspendido sale del directorio (6)', null, 'anon', $q$select count(*) from public.directory_search()$q$, '6');
+select t.ex('Un estado de negocio inexistente se rechaza con el mensaje del servidor (no con un error de la tabla)', '{D}', 'authenticated', $q$select public.admin_set_business_status('{BIZ1}', 'borrado')$q$, 'ERR 22023%');
 select t.ex('D reaprueba el negocio', '{D}', 'authenticated', $q$select public.admin_set_business_status('{BIZ1}', 'approved')$q$, 'OK rows=1');
 insert into public.businesses (owner_id, name, category, status) select '{C}', 'extra' || g, 'otro', 'pending' from generate_series(1, 3) g;
 select t.ex('Máximo 5 establecimientos por cuenta', '{C}', 'authenticated', $q$insert into public.businesses (name, category) values ('de más', 'otro')$q$, 'ERR P0001%');
@@ -547,6 +552,9 @@ select t.eq('...pero NUNCA las notas internas', null, 'anon',
   format($q$select (public.track_complaint(%L)::text like '%%nota privada%%')::text$q$, (select v from t.vars where k = 'c1')), 'false', '{"x-forwarded-for":"10.0.0.21"}');
 select t.ex('Ni un admin puede editar el texto original de la denuncia (integridad)', '{D}', 'authenticated', $q$update public.complaints set description = 'alterada'$q$, 'ERR 42501%');
 select t.ex('Estado inválido rechazado', '{D}', 'authenticated', $q$update public.complaints set status = 'borrada'$q$, 'ERR 23514%');
+select t.eq('(control) ya hay denuncias guardadas', null, 'service_role', $q$select (count(*) >= 2)::text from public.complaints$q$, 'true');
+select t.eq('Un usuario normal sigue sin ver NINGUNA denuncia aunque ya existan varias', '{A}', 'authenticated', $q$select count(*) from public.complaints$q$, '0');
+select t.eq('...ni una aliada', '{C}', 'authenticated', $q$select count(*) from public.complaints$q$, '0');
 select t.eq('A no ve la bitácora de administración', '{A}', 'authenticated', $q$select count(*) from public.admin_audit_log$q$, '0');
 select t.ex('A NO puede escribir en la bitácora', '{A}', 'authenticated', $q$insert into public.admin_audit_log (action) values ('falso')$q$, 'ERR 42501%');
 
@@ -866,7 +874,7 @@ select t.eq('Quien no es administrador NO recibe nada', null, 'service_role',
 select t.eq('El aviso solo lleva código, tipo y estado, no la descripción', null, 'service_role',
   $q$select count(*) from public.notifications where body like '%SECRETO%'$q$, '0');
 select t.eq('El aviso lleva al panel y es de tipo «aviso»', null, 'service_role',
-  $q$select (link = 'admin.html' and type = 'aviso' and body like 'Código TP-____-____ · abandono · Zacatecas')::text from public.notifications where user_id = '{I}' and title = 'Nueva denuncia recibida' and body like '%Zacatecas%'$q$, 'true');
+  $q$select (link = 'admin.html#denuncias' and type = 'aviso' and body like 'Código TP-____-____ · abandono · Zacatecas')::text from public.notifications where user_id = '{I}' and title = 'Nueva denuncia recibida' and body like '%Zacatecas%'$q$, 'true');
 
 -- ---- Avisos al equipo: chat (una vez por «turno») ----
 update public.profiles set notification_prefs = notification_prefs || '{"aviso": true}' where id = '{I}';
@@ -876,7 +884,7 @@ select t.eq('El equipo recibe UN aviso por la conversación nueva (D)', null, 's
 select t.eq('...y la otra administradora (I)', null, 'service_role',
   $q$select count(*) from public.notifications where user_id = '{I}' and body = 'Consulta de Gus'$q$, '1');
 select t.eq('El aviso es de tipo «mensaje» y lleva al panel', null, 'service_role',
-  $q$select (type = 'mensaje' and link = 'admin.html')::text from public.notifications where user_id = '{D}' and body = 'Consulta de Gus'$q$, 'true');
+  $q$select (type = 'mensaje' and link = 'admin.html#atencion')::text from public.notifications where user_id = '{D}' and body = 'Consulta de Gus'$q$, 'true');
 select t.ex('G escribe otro mensaje seguido', '{G}', 'authenticated', $q$insert into public.messages (conversation_id, body) values ((select id from public.conversations where subject = 'Consulta de Gus'), 'Sigo aquí')$q$, 'OK rows=1');
 select t.eq('Mensajes seguidos del mismo turno NO repiten el aviso', null, 'service_role',
   $q$select count(*) from public.notifications where user_id = '{D}' and body = 'Consulta de Gus'$q$, '1');
@@ -938,7 +946,7 @@ select t.eq('La persona recibe un aviso de «suscripción» sin cargos ni pagos'
 select t.eq('Los DOS administradores reciben el aviso, con plan, periodo, tipo de cuenta y código', null, 'postgres',
   $q$select count(*) from public.notifications n, public.plan_requests r
      where r.user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and n.type = 'aviso' and n.title = 'Nueva solicitud de plan' and n.user_id in ('{D}', '{I}')
-       and n.body = 'Huellita Pro · mensual · cuenta de dueño de mascota · código ' || private.plan_request_code(r.id) and n.link = 'admin.html'$q$, '2');
+       and n.body = 'Huellita Pro · mensual · cuenta de dueño de mascota · código ' || private.plan_request_code(r.id) and n.link = 'admin.html#subs'$q$, '2');
 select t.eq('El aviso al equipo NO incluye correo ni nombre de quien lo pidió', null, 'service_role',
   $q$select count(*) from public.notifications where title = 'Nueva solicitud de plan' and (body ilike '%prueba.mx%' or body ilike '%Sol%')$q$, '0');
 select t.eq('Quien no es del equipo no recibe avisos de solicitudes', null, 'service_role',
@@ -1111,7 +1119,308 @@ select t.eq('Pedir recordatorios NO marca como vencida la suscripción atrasada 
   $q$select status from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000002'$q$, 'active');
 
 -- =====================================================================
-select t.grupo('12 Invariantes globales de seguridad');
+select t.grupo('12 Panel de administración (Etapa 10)');
+-- =====================================================================
+-- P1 dueño con mascota y suscripción · P2 aliada con 2 establecimientos y promociones · P3 dueño con solicitud y chat
+-- P4 persona sin nada · AD admin del panel (D ya es admin de pruebas)
+insert into auth.users (id, email, raw_user_meta_data, last_sign_in_at, email_confirmed_at) values
+ ('a1010101-0000-4000-8000-000000000001', 'paco@prueba.mx',  '{"display_name":"Paco"}', now() - interval '2 days', now()),
+ ('a1010101-0000-4000-8000-000000000002', 'pili@prueba.mx',  '{"display_name":"Pili","account_type":"business"}', null, null),
+ ('a1010101-0000-4000-8000-000000000003', 'pablo@prueba.mx', '{"display_name":"Pablo"}', null, now()),
+ ('a1010101-0000-4000-8000-000000000004', 'puri@prueba.mx',  '{"display_name":"Puri"}', null, now());
+insert into public.pets (owner_id, name, species) values ('a1010101-0000-4000-8000-000000000001', 'Rocky', 'perro');
+select private.assign_subscription('a1010101-0000-4000-8000-000000000001', 'pro', 'monthly');
+select private.assign_subscription('a1010101-0000-4000-8000-000000000002', 'plata', 'yearly');
+insert into public.businesses (id, owner_id, name, category, state, municipality, status, description) values
+ ('b1010101-0000-4000-8000-000000000001', 'a1010101-0000-4000-8000-000000000002', 'Patitas Felices Pili', 'veterinaria', 'Jalisco', 'Zapopan', 'pending', 'Consultas y vacunas'),
+ ('b1010101-0000-4000-8000-000000000002', 'a1010101-0000-4000-8000-000000000002', 'Pili Estética Canina', 'estetica_canina', 'Jalisco', 'Guadalajara', 'approved', 'Baños y cortes');
+insert into public.business_promotions (id, business_id, title, description, ends_on) values
+ ('c1010101-0000-4000-8000-000000000001', 'b1010101-0000-4000-8000-000000000002', 'Baño gratis en tu cumple', 'Promoción de prueba', private.today_mx() + 10);
+select t.ex('PANEL · (preparación) Pablo solicita Huellita VIP anual', 'a1010101-0000-4000-8000-000000000003', 'authenticated', $q$select public.request_plan('vip', 'yearly', 'Quiero el chip')$q$, 'OK rows=1');
+insert into public.admin_audit_log (admin_id, action) values ('{D}', 'zz_a'), ('{D}', 'zzxa');
+
+-- Acceso: ninguna función del panel responde a una persona sin rol de administrador, ni a un visitante.
+select t.ex('PANEL · ' || v.l || ': una persona sin rol de administrador es rechazada', '{A}', 'authenticated', v.q, 'ERR 42501%')
+from (values
+ ('stats', $q$select public.admin_dashboard_stats()$q$),
+ ('ficha de usuario', $q$select public.admin_get_user('a1010101-0000-4000-8000-000000000001')$q$),
+ ('lista de aliados', $q$select * from public.admin_list_businesses()$q$),
+ ('ficha de aliado', $q$select public.admin_get_business('b1010101-0000-4000-8000-000000000001')$q$),
+ ('borrar promoción', $q$select public.admin_delete_promotion('c1010101-0000-4000-8000-000000000001', 'x')$q$),
+ ('lista de denuncias', $q$select * from public.admin_list_complaints()$q$),
+ ('ver denuncia', $q$select public.admin_get_complaint(gen_random_uuid())$q$),
+ ('actualizar denuncia', $q$select public.admin_update_complaint(gen_random_uuid(), 'cerrada')$q$),
+ ('lista de guías', $q$select * from public.admin_list_guides()$q$),
+ ('ver guía', $q$select public.admin_get_guide(gen_random_uuid())$q$),
+ ('guardar guía', $q$select public.admin_save_guide(null, 'hola', 'Hola mundo', 'r', 'c', 'perros')$q$),
+ ('borrar guía', $q$select public.admin_delete_guide(gen_random_uuid())$q$),
+ ('lista de solicitudes', $q$select * from public.admin_list_plan_requests()$q$),
+ ('lista de suscripciones', $q$select * from public.admin_list_subscriptions()$q$),
+ ('lista de conversaciones', $q$select * from public.admin_list_conversations()$q$),
+ ('ver conversación', $q$select public.admin_get_conversation(gen_random_uuid())$q$),
+ ('responder conversación', $q$select public.admin_reply_conversation(gen_random_uuid(), 'hola')$q$),
+ ('cambiar estado de conversación', $q$select public.admin_set_conversation_status(gen_random_uuid(), 'cerrada')$q$),
+ ('bitácora', $q$select * from public.admin_list_audit()$q$)) v(l, q);
+select t.ok('PANEL · un visitante anónimo no puede ejecutar NINGUNA función admin_*',
+  not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname like 'admin\_%' and has_function_privilege('anon', p.oid, 'execute')),
+  (select string_agg(p.proname, ',') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and has_function_privilege('anon', p.oid, 'execute')));
+select t.eq('PANEL · todas las funciones admin_* empiezan comprobando el rol de administrador en el servidor', null, 'service_role',
+  $q$select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosecdef and pg_get_functiondef(p.oid) not like '%private.require_admin()%'$q$, '0');
+
+-- Estadísticas
+select t.eq('PANEL · las estadísticas incluyen solicitudes de plan pendientes, cuentas suspendidas y conversaciones abiertas', '{D}', 'authenticated',
+  $q$select (s ? 'plan_requests_pending' and s ? 'suspended_users' and s ? 'conversations_open' and (s->>'plan_requests_pending')::int >= 1)::text from (select public.admin_dashboard_stats() s) x$q$, 'true');
+
+-- Ficha de usuario
+select t.eq('PANEL · la ficha de usuario trae correo, plan, vencimiento, conteos y confirmación de correo', '{D}', 'authenticated',
+  $q$select (u->>'email' = 'paco@prueba.mx' and u->>'plan_id' = 'pro' and (u->'subscription'->>'ends_at') is not null
+             and (u->>'pets')::int = 1 and (u->>'businesses')::int = 0 and (u->>'email_confirmed')::boolean and (u->>'last_sign_in_at') is not null
+             and not (u->>'is_admin')::boolean and u->'pending_request' = 'null'::jsonb)::text
+      from (select public.admin_get_user('a1010101-0000-4000-8000-000000000001') u) x$q$, 'true');
+select t.eq('PANEL · la ficha muestra la solicitud pendiente de Pablo y que Pili aún no confirma su correo', '{D}', 'authenticated',
+  $q$select ((public.admin_get_user('a1010101-0000-4000-8000-000000000003')->'pending_request'->>'plan_id') = 'vip'
+             and not (public.admin_get_user('a1010101-0000-4000-8000-000000000002')->>'email_confirmed')::boolean
+             and (public.admin_get_user('{D}')->>'is_admin')::boolean)::text$q$, 'true');
+select t.ex('PANEL · la ficha de una persona inexistente da un error claro', '{D}', 'authenticated', $q$select public.admin_get_user(gen_random_uuid())$q$, 'ERR P0002%');
+select t.eq('PANEL · la ficha NO expone contraseñas ni metadatos internos', '{D}', 'authenticated',
+  $q$select (not (public.admin_get_user('a1010101-0000-4000-8000-000000000001')::text ~* 'password|raw_|encrypted'))::text$q$, 'true');
+
+-- Aliados
+select t.eq('PANEL · la lista de aliados pone primero los pendientes y trae correo del dueño, plan y promociones activas', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_businesses(null, 'pili') ) || '|' || (select name from public.admin_list_businesses(null, 'pili') limit 1) || '|' || (select owner_email from public.admin_list_businesses('approved', 'pili') limit 1)
+      || '|' || (select plan_id from public.admin_list_businesses('approved', 'pili') limit 1) || '|' || (select active_promotions from public.admin_list_businesses('approved', 'pili') limit 1)$q$,
+  '2|Patitas Felices Pili|pili@prueba.mx|plata|1');
+select t.eq('PANEL · buscar aliados por municipio y por correo del dueño', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_businesses(null, 'guadalajara'))::text || (select count(*) from public.admin_list_businesses(null, 'pili@prueba'))::text$q$, '12');
+select t.ex('PANEL · un estado no válido en la lista de aliados se rechaza', '{D}', 'authenticated', $q$select * from public.admin_list_businesses('borrado')$q$, 'ERR 22023%');
+select t.eq('PANEL · el total (total_count) no depende del tamaño de página', '{D}', 'authenticated',
+  $q$select (total_count = (select count(*) from public.businesses))::text from public.admin_list_businesses(null, null, 1, 0)$q$, 'true');
+select t.eq('PANEL · el tope de página es 100 y un desplazamiento negativo se trata como 0', '{D}', 'authenticated',
+  $q$select ((select count(*) from public.admin_list_businesses(null, null, 100000, -5)) = least(100, (select count(*) from public.businesses)))::text$q$, 'true');
+select t.eq('PANEL · la ficha de aliado trae dueño, plan, promociones y SIN rutas de archivos', '{D}', 'authenticated',
+  $q$select ((b->'owner'->>'email') = 'pili@prueba.mx' and (b->'plan'->>'id') = 'plata' and jsonb_array_length(b->'promotions') = 1
+             and not (b ? 'logo_path') and not (b ? 'photo_paths') and b ? 'photos' and b ? 'hours')::text
+      from (select public.admin_get_business('b1010101-0000-4000-8000-000000000002') b) x$q$, 'true');
+select t.ex('PANEL · ficha de un aliado inexistente: error claro', '{D}', 'authenticated', $q$select public.admin_get_business(gen_random_uuid())$q$, 'ERR P0002%');
+select t.ex('PANEL · aprobar un establecimiento con la función de administración', '{D}', 'authenticated',
+  $q$select public.admin_set_business_status('b1010101-0000-4000-8000-000000000001', 'approved')$q$, 'OK rows=1');
+select t.eq('PANEL · aprobar un establecimiento queda en la bitácora', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_audit('business_status') where target_id = 'b1010101-0000-4000-8000-000000000001'$q$, '1');
+select t.ex('PANEL · borrar una promoción inexistente: error claro', '{D}', 'authenticated', $q$select public.admin_delete_promotion(gen_random_uuid())$q$, 'ERR P0002%');
+select t.ex('PANEL · retirar una promoción con motivo', '{D}', 'authenticated',
+  $q$select public.admin_delete_promotion('c1010101-0000-4000-8000-000000000001', 'Incluye un precio engañoso')$q$, 'OK rows=1');
+select t.eq('PANEL · la promoción desaparece, queda en bitácora con el motivo y la dueña recibe un aviso con el motivo', null, 'service_role',
+  $q$select (select count(*) from public.business_promotions where id = 'c1010101-0000-4000-8000-000000000001')::text || '|'
+       || (select count(*) from public.admin_audit_log where action = 'promotion_delete' and details->>'reason' = 'Incluye un precio engañoso')::text || '|'
+       || (select count(*) from public.notifications where user_id = 'a1010101-0000-4000-8000-000000000002' and title = 'Se retiró una promoción' and body = 'Incluye un precio engañoso')::text$q$,
+  '0|1|1');
+
+-- Denuncias
+insert into public.complaints (tracking_code, type, description, approx_date, state, municipality, photo_paths) values
+ ('TP-PANL-ABCD', 'abandono', repeat('Perro atado sin agua. ', 20), current_date - 2, 'Jalisco', 'Zapopan', array['x/1.jpg', 'x/2.jpg']),
+ ('TP-PANL-EFGH', 'otra', repeat('Otra situación descrita. ', 5), current_date - 1, 'Nuevo León', 'Monterrey', '{}');
+select t.eq('PANEL · la lista de denuncias muestra un extracto de 160 caracteres, el número de fotos y filtra por «pendientes»', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_complaints('pendientes') where tracking_code like 'TP-PANL-%')::text || '|'
+       || (select max(char_length(excerpt)) from public.admin_list_complaints() where tracking_code = 'TP-PANL-ABCD')::text || '|'
+       || (select photos from public.admin_list_complaints() where tracking_code = 'TP-PANL-ABCD')::text$q$, '2|160|2');
+select t.ex('PANEL · un estado de denuncia no válido en el filtro se rechaza', '{D}', 'authenticated', $q$select * from public.admin_list_complaints('borrada')$q$, 'ERR 22023%');
+select t.ex('PANEL · actualizar una denuncia con estado no válido', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'), 'resuelta')$q$, 'ERR 22023%');
+select t.ex('PANEL · actualizar una denuncia con prioridad no válida', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'), 'en_revision', 'critica')$q$, 'ERR 22023%');
+select t.ex('PANEL · la actualización pública admite hasta 500 caracteres', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'), 'en_revision', null, false, repeat('x', 501))$q$, 'ERR P0001%500%');
+select t.ex('PANEL · las notas internas admiten hasta 4000 caracteres', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'), 'en_revision', null, false, null, repeat('x', 4001))$q$, 'ERR P0001%4000%');
+select t.ex('PANEL · denuncia inexistente al actualizar', '{D}', 'authenticated', $q$select public.admin_update_complaint(gen_random_uuid(), 'cerrada')$q$, 'ERR P0002%');
+select t.ex('PANEL · el admin canaliza una denuncia con aviso público y notas internas', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'), 'canalizada', 'alta', true,
+        '  El equipo orientó el caso hacia la instancia que puede atenderlo.  ', 'Contactar a la fiscalía local')$q$, 'OK rows=1');
+select t.eq('PANEL · queda estado, prioridad, seguimiento con fecha, texto recortado y notas', null, 'service_role',
+  $q$select status || '|' || priority || '|' || attended::text || '|' || (attended_at is not null)::text || '|' || public_update || '|' || internal_notes
+       from public.complaints where tracking_code = 'TP-PANL-ABCD'$q$,
+  'canalizada|alta|true|true|El equipo orientó el caso hacia la instancia que puede atenderlo.|Contactar a la fiscalía local');
+select t.eq('PANEL · quien reportó ve el aviso público pero NO las notas internas', null, 'anon',
+  $q$select (public.track_complaint('TP-PANL-ABCD')::text like '%instancia que puede atenderlo%')::text || (public.track_complaint('TP-PANL-ABCD')::text like '%fiscal%')::text$q$, 'truefalse');
+select t.eq('PANEL · el cambio de la denuncia queda en la bitácora (sin el texto de las notas)', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_audit('complaint_update') a where a.details->>'status_to' = 'canalizada' and not (a.details::text like '%fiscal%')$q$, '1');
+select t.ex('PANEL · el admin desmarca «atendida» y deja vacíos los textos', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'), 'en_proceso', null, false, '   ', '')$q$, 'OK rows=1');
+select t.eq('PANEL · desmarcar «atendida» borra la fecha de atención y las notas vacías quedan nulas', null, 'service_role',
+  $q$select (attended_at is null and public_update is null and internal_notes is null and priority is null and status = 'en_proceso')::text
+       from public.complaints where tracking_code = 'TP-PANL-ABCD'$q$, 'true');
+select t.eq('PANEL · admin_get_complaint devuelve el contenido completo de la denuncia', '{D}', 'authenticated',
+  $q$select (length(public.admin_get_complaint((select id from public.complaints where tracking_code = 'TP-PANL-ABCD'))->>'description') > 400)::text$q$, 'true');
+select t.ex('PANEL · una nota interna sola (sin aviso público) se guarda', '{D}', 'authenticated',
+  $q$select public.admin_update_complaint((select id from public.complaints where tracking_code = 'TP-PANL-EFGH'), 'en_revision', null, false, null, 'Revisar con la dueña del local')$q$, 'OK rows=1');
+select t.eq('PANEL · la nota interna NO se copia al aviso público', null, 'service_role',
+  $q$select (public_update is null and internal_notes = 'Revisar con la dueña del local')::text from public.complaints where tracking_code = 'TP-PANL-EFGH'$q$, 'true');
+select t.eq('PANEL · y quien reportó no ve la nota interna', null, 'anon',
+  $q$select (public.track_complaint('TP-PANL-EFGH')::text like '%dueña del local%')::text$q$, 'false');
+select t.ex('PANEL · la descripción de una denuncia no se puede modificar ni siquiera por un admin con UPDATE directo', '{D}', 'authenticated',
+  $q$update public.complaints set description = 'cambiada ' || repeat('x', 40) where tracking_code = 'TP-PANL-ABCD'$q$, 'ERR 42501%');
+
+-- Guías
+select t.ex('PANEL · crear una guía nueva (queda en borrador)', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'Cuidado-del-Gato-2', 'Cuidado del gato', 'Resumen corto', 'Contenido de prueba', 'gatos', 'Pendiente de revisión veterinaria', false)$q$, 'OK rows=1');
+select t.eq('PANEL · la guía nueva está en borrador, con dirección en minúsculas, y un visitante NO la ve', null, 'anon',
+  $q$select count(*) from public.care_guides where slug = 'cuidado-del-gato-2'$q$, '0');
+select t.eq('PANEL · pero el admin sí la ve en su lista de borradores', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_guides(null, 'draft') where slug = 'cuidado-del-gato-2' and not is_published$q$, '1');
+select t.ex('PANEL · una dirección repetida se rechaza con un mensaje claro', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'cuidado-del-gato-2', 'Otro título', 'r', 'c', 'gatos')$q$, 'ERR P0001%Ya existe otra guía%');
+select t.ex('PANEL · una dirección con caracteres no permitidos se rechaza', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'Mi guía!', 'Otro título', 'r', 'c', 'gatos')$q$, 'ERR P0001%dirección%');
+select t.ex('PANEL · una categoría no válida se rechaza', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'otra-guia', 'Otro título', 'r', 'c', 'dragones')$q$, 'ERR 22023%');
+select t.ex('PANEL · título demasiado corto, resumen y contenido fuera de rango se rechazan', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'otra-guia', 'ab', 'r', 'c', 'gatos')$q$, 'ERR P0001%título%');
+select t.ex('PANEL · contenido vacío se rechaza', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'otra-guia', 'Otro título', 'r', '   ', 'gatos')$q$, 'ERR P0001%contenido%');
+select t.ex('PANEL · publicar la guía al editarla', '{D}', 'authenticated',
+  $q$select public.admin_save_guide((select id from public.care_guides where slug = 'cuidado-del-gato-2'), 'cuidado-del-gato-2', 'Cuidado del gato adulto', 'Resumen', 'Contenido editado', 'gatos', 'Revisada por Dra. Prueba', true)$q$, 'OK rows=1');
+select t.eq('PANEL · ahora un visitante la ve, con fecha de publicación y título nuevo', null, 'anon',
+  $q$select title || '|' || (published_at is not null)::text from public.care_guides where slug = 'cuidado-del-gato-2'$q$, 'Cuidado del gato adulto|true');
+select t.ex('PANEL · una fuente de más de 200 caracteres se rechaza', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'otra-guia', 'Otro título', 'r', 'c', 'gatos', repeat('f', 201))$q$, 'ERR P0001%fuente%');
+select t.ex('PANEL · un resumen de más de 300 caracteres se rechaza', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'otra-guia', 'Otro título', repeat('r', 301), 'c', 'gatos')$q$, 'ERR P0001%resumen%');
+select t.ex('PANEL · un contenido de más de 20000 caracteres se rechaza', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(null, 'otra-guia', 'Otro título', 'r', repeat('c', 20001), 'gatos')$q$, 'ERR P0001%contenido%');
+insert into t.vars select 'gpub', published_at::text from public.care_guides where slug = 'cuidado-del-gato-2';
+select pg_sleep(0.05);
+select t.ex('PANEL · editar una guía que ya está publicada la deja publicada', '{D}', 'authenticated',
+  $q$select public.admin_save_guide((select id from public.care_guides where slug = 'cuidado-del-gato-2'), 'cuidado-del-gato-2', 'Cuidado del gato adulto', 'Resumen 2', 'Contenido editado', 'gatos', 'Revisada por Dra. Prueba', true)$q$, 'OK rows=1');
+select t.eq('PANEL · …y conserva su fecha original de publicación', null, 'postgres',
+  $q$select (is_published and published_at::text = (select v from t.vars where k = 'gpub'))::text from public.care_guides where slug = 'cuidado-del-gato-2'$q$, 'true');
+select t.ex('PANEL · editar una guía inexistente: error claro', '{D}', 'authenticated',
+  $q$select public.admin_save_guide(gen_random_uuid(), 'otra-guia', 'Otro título', 'r', 'c', 'gatos')$q$, 'ERR P0002%');
+select t.ex('PANEL · despublicar la guía', '{D}', 'authenticated',
+  $q$select public.admin_save_guide((select id from public.care_guides where slug = 'cuidado-del-gato-2'), 'cuidado-del-gato-2', 'Cuidado del gato adulto', 'Resumen', 'Contenido editado', 'gatos', 'Revisada por Dra. Prueba', false)$q$, 'OK rows=1');
+select t.eq('PANEL · y un visitante ya no la ve', null, 'anon', $q$select count(*) from public.care_guides where slug = 'cuidado-del-gato-2'$q$, '0');
+select t.eq('PANEL · crear, publicar, editar y despublicar quedan en la bitácora (sin el contenido)', '{D}', 'authenticated',
+  $q$select string_agg(action, ',' order by id) from public.admin_list_audit('guide') a where a.target_id = (select id::text from public.care_guides where slug = 'cuidado-del-gato-2')$q$, 'guide_create,guide_publish,guide_update,guide_unpublish');
+select t.eq('PANEL · la bitácora de guías no guarda el texto de la guía', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_audit('guide') a where a.details::text ~ 'Contenido (editado|de prueba)'$q$, '0');
+select t.eq('PANEL · la línea de «guía creada» solo guarda la dirección y si nació publicada', '{D}', 'authenticated',
+  $q$select (details = jsonb_build_object('slug', 'cuidado-del-gato-2', 'published', false))::text from public.admin_list_audit('guide_create') a where a.details->>'slug' = 'cuidado-del-gato-2'$q$, 'true');
+select t.ex('PANEL · borrar la guía', '{D}', 'authenticated', $q$select public.admin_delete_guide((select id from public.care_guides where slug = 'cuidado-del-gato-2'))$q$, 'OK rows=1');
+select t.eq('PANEL · la guía ya no existe y el borrado quedó en la bitácora', '{D}', 'authenticated',
+  $q$select (select count(*) from public.care_guides where slug = 'cuidado-del-gato-2')::text || '|' || (select count(*) from public.admin_list_audit('guide_delete') where details->>'slug' = 'cuidado-del-gato-2')::text$q$, '0|1');
+select t.ex('PANEL · borrar una guía inexistente: error claro', '{D}', 'authenticated', $q$select public.admin_delete_guide(gen_random_uuid())$q$, 'ERR P0002%');
+insert into public.care_guides (slug, title, summary, content, category) values ('guia-desde-sql-editor', 'Guía desde SQL', 'r', 'c', 'perros');
+select t.eq('PANEL · las guías cargadas desde el SQL Editor (sin sesión) no llenan la bitácora', null, 'service_role',
+  $q$select count(*) from public.admin_audit_log where target_table = 'care_guides' and details->>'slug' = 'guia-desde-sql-editor'$q$, '0');
+select t.ex('PANEL · una persona sin rol sigue sin poder escribir guías directamente', '{A}', 'authenticated',
+  $q$insert into public.care_guides (slug, title, summary, content, category) values ('hack-guia', 'Hack guía', 'r', 'c', 'perros')$q$, 'ERR 42501%');
+
+-- Solicitudes de plan y suscripciones
+select t.eq('PANEL · la lista de solicitudes pendientes trae correo, nombre, tipo de cuenta, plan, código y nota', '{D}', 'authenticated',
+  $q$select email || '|' || display_name || '|' || account_type || '|' || plan_id || '|' || plan_name || '|' || billing_period || '|' || user_note || '|' || (code ~ '^[0-9A-F]{8}$')::text || '|' || current_plan_id
+       from public.admin_list_plan_requests('pending') where email = 'pablo@prueba.mx'$q$,
+  'pablo@prueba.mx|Pablo|owner|vip|Huellita VIP|yearly|Quiero el chip|true|basica');
+select t.ex('PANEL · estado no válido en solicitudes', '{D}', 'authenticated', $q$select * from public.admin_list_plan_requests('x')$q$, 'ERR 22023%');
+select t.ex('PANEL · aprobar la solicitud con la función del panel', '{D}', 'authenticated',
+  $q$select public.admin_resolve_plan_request((select id from public.plan_requests where user_id = 'a1010101-0000-4000-8000-000000000003' and status = 'pending'), true, 'Bienvenido', null)$q$, 'OK rows=1');
+select t.eq('PANEL · la solicitud deja de estar pendiente, aparece como aprobada y el plan queda activo sin cobro', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_plan_requests('pending') where email = 'pablo@prueba.mx')::text || '|'
+       || (select status from public.admin_list_plan_requests('approved') where email = 'pablo@prueba.mx' limit 1) || '|'
+       || (select plan_id from public.subscriptions where user_id = 'a1010101-0000-4000-8000-000000000003' and status = 'active')$q$, '0|approved|vip');
+select t.eq('PANEL · la lista de suscripciones activas trae correo, plan, días restantes y busca por correo', '{D}', 'authenticated',
+  $q$select email || '|' || plan_id || '|' || billing_period || '|' || (days_left between 29 and 32)::text from public.admin_list_subscriptions('active', 'paco') $q$, 'paco@prueba.mx|pro|monthly|true');
+update public.subscriptions set ends_at = now() + interval '5 days' where user_id = 'a1010101-0000-4000-8000-000000000001' and status = 'active';
+select t.eq('PANEL · el filtro «por vencer» (15 días o menos) trae a Paco y no a Pili (plan anual)', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_subscriptions('expiring', 'paco'))::text || (select count(*) from public.admin_list_subscriptions('expiring', 'pili'))::text$q$, '10');
+select t.ex('PANEL · estado de suscripción no válido', '{D}', 'authenticated', $q$select * from public.admin_list_subscriptions('vencida')$q$, 'ERR 22023%');
+select t.ex('PANEL · asignar un plan con la función existente', '{D}', 'authenticated',
+  $q$select public.admin_assign_subscription('a1010101-0000-4000-8000-000000000004', 'pro', 'yearly', null, null, 'Cortesía')$q$, 'OK rows=1');
+select t.eq('PANEL · la suscripción asignada aparece en la lista de activas', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_subscriptions('active', 'puri')$q$, '1');
+select t.ex('PANEL · cancelar con la función existente', '{D}', 'authenticated', $q$select public.admin_cancel_subscription('a1010101-0000-4000-8000-000000000004', 'Prueba')$q$, 'OK rows=1');
+select t.eq('PANEL · y pasa de «activas» a «canceladas»', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_subscriptions('active', 'puri'))::text || '|' || (select count(*) from public.admin_list_subscriptions('cancelled', 'puri'))::text$q$, '0|1');
+
+-- Atención al cliente
+insert into public.conversations (id, user_id, subject, last_message_at) values
+ ('d1010101-0000-4000-8000-000000000001', 'a1010101-0000-4000-8000-000000000003', 'No puedo subir la foto', now() - interval '3 hours'),
+ ('d1010101-0000-4000-8000-000000000002', 'a1010101-0000-4000-8000-000000000001', 'Gracias por todo', now() - interval '1 hour');
+insert into public.messages (conversation_id, sender_id, body, created_at) values
+ ('d1010101-0000-4000-8000-000000000001', 'a1010101-0000-4000-8000-000000000003', 'Hola, no puedo subir la foto de mi perro', now() - interval '3 hours'),
+ ('d1010101-0000-4000-8000-000000000002', 'a1010101-0000-4000-8000-000000000001', 'Quería agradecerles', now() - interval '2 hours');
+select t.ex('PANEL · una persona con rol de administrador (D) puede listar conversaciones', '{D}', 'authenticated', $q$select * from public.admin_list_conversations()$q$, 'OK rows=%');
+select t.eq('PANEL · «pendientes» trae lo que espera respuesta (última palabra de la persona) con nombre, correo, conteo y último mensaje', '{D}', 'authenticated',
+  $q$select subject || '|' || display_name || '|' || email || '|' || message_count || '|' || last_body from public.admin_list_conversations('pending', 100, 0) where user_id = 'a1010101-0000-4000-8000-000000000003'$q$,
+  'No puedo subir la foto|Pablo|pablo@prueba.mx|1|Hola, no puedo subir la foto de mi perro');
+select t.ex('PANEL · filtro de conversaciones no válido', '{D}', 'authenticated', $q$select * from public.admin_list_conversations('rojas')$q$, 'ERR 22023%');
+select t.eq('PANEL · la conversación completa trae al usuario y los mensajes en orden, sin identificadores de remitente', '{D}', 'authenticated',
+  $q$select ((c->'user'->>'email') = 'pablo@prueba.mx' and jsonb_array_length(c->'messages') = 1 and (c->'messages'->0->>'sender_role') = 'user'
+             and not ((c->'messages'->0) ? 'sender_id') and (c->>'total_messages')::int = 1)::text
+      from (select public.admin_get_conversation('d1010101-0000-4000-8000-000000000001') c) x$q$, 'true');
+select t.ex('PANEL · conversación inexistente: error claro', '{D}', 'authenticated', $q$select public.admin_get_conversation(gen_random_uuid())$q$, 'ERR P0002%');
+select t.ex('PANEL · responder con un mensaje vacío se rechaza', '{D}', 'authenticated', $q$select public.admin_reply_conversation('d1010101-0000-4000-8000-000000000001', '   ')$q$, 'ERR P0001%');
+select t.ex('PANEL · responder con más de 2000 caracteres se rechaza', '{D}', 'authenticated', $q$select public.admin_reply_conversation('d1010101-0000-4000-8000-000000000001', repeat('x', 2001))$q$, 'ERR P0001%2000%');
+select t.ex('PANEL · responder a una conversación inexistente: error claro', '{D}', 'authenticated', $q$select public.admin_reply_conversation(gen_random_uuid(), 'hola')$q$, 'ERR P0002%');
+select t.ex('PANEL · el admin responde', '{D}', 'authenticated', $q$select public.admin_reply_conversation('d1010101-0000-4000-8000-000000000001', '  Hola Pablo, ya revisamos tu cuenta.  ')$q$, 'OK rows=1');
+select t.eq('PANEL · el mensaje queda como «equipo», enviado por el admin, recortado, y la conversación pasa a «respondida»', null, 'service_role',
+  $q$select m.sender_role || '|' || (m.sender_id = '{D}')::text || '|' || m.body || '|' || c.last_sender
+       from public.messages m join public.conversations c on c.id = m.conversation_id
+      where m.conversation_id = 'd1010101-0000-4000-8000-000000000001' order by m.created_at desc, m.id desc limit 1$q$,
+  'staff|true|Hola Pablo, ya revisamos tu cuenta.|staff');
+select t.eq('PANEL · Pablo recibe el aviso de respuesta', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = 'a1010101-0000-4000-8000-000000000003' and title = 'Nueva respuesta de atención al cliente'$q$, '1');
+select t.eq('PANEL · y la conversación ya no aparece en «pendientes»', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_conversations('pending', 100, 0) where id = 'd1010101-0000-4000-8000-000000000001'$q$, '0');
+select t.ex('PANEL · cerrar la conversación', '{D}', 'authenticated', $q$select public.admin_set_conversation_status('d1010101-0000-4000-8000-000000000001', 'cerrada')$q$, 'OK rows=1');
+select t.eq('PANEL · aparece en «cerradas», no en «abiertas», y quedó en la bitácora', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_conversations('closed', 100, 0) where id = 'd1010101-0000-4000-8000-000000000001')::text || (select count(*) from public.admin_list_conversations('open', 100, 0) where id = 'd1010101-0000-4000-8000-000000000001')::text
+       || '|' || (select count(*) from public.admin_list_audit('conversation_status'))::text$q$, '10|1');
+select t.ex('PANEL · cambiar el estado de una conversación inexistente: error claro', '{D}', 'authenticated', $q$select public.admin_set_conversation_status(gen_random_uuid(), 'cerrada')$q$, 'ERR P0002%');
+select t.ex('PANEL · estado de conversación no válido', '{D}', 'authenticated', $q$select public.admin_set_conversation_status('d1010101-0000-4000-8000-000000000001', 'archivada')$q$, 'ERR 22023%');
+select t.ex('PANEL · Pablo no puede reabrir su conversación cerrada (regla de la Etapa 7)', 'a1010101-0000-4000-8000-000000000003', 'authenticated',
+  $q$update public.conversations set status = 'abierta' where id = 'd1010101-0000-4000-8000-000000000001'$q$, 'ERR P0001%');
+select t.ex('PANEL · el admin responde en la conversación cerrada', '{D}', 'authenticated',
+  $q$select public.admin_reply_conversation('d1010101-0000-4000-8000-000000000001', 'Reabrimos para seguir ayudándote')$q$, 'OK rows=1');
+select t.eq('PANEL · responder en una conversación cerrada la reabre', null, 'service_role',
+  $q$select status from public.conversations where id = 'd1010101-0000-4000-8000-000000000001'$q$, 'abierta');
+select t.ex('PANEL · una persona sin rol NO puede leer la conversación de otra aunque conozca su identificador', 'a1010101-0000-4000-8000-000000000004', 'authenticated',
+  $q$select public.admin_get_conversation('d1010101-0000-4000-8000-000000000001')$q$, 'ERR 42501%');
+
+-- Bitácora
+select t.eq('PANEL · la bitácora lista quién hizo qué (nombre y correo de la persona administradora)', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_audit('promotion') where admin_email = 'dani@prueba.mx' and admin_name = 'Dani'$q$, '1');
+select t.eq('PANEL · el filtro por prefijo trata «_» como carácter normal, no como comodín', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_audit('zz_') where action in ('zz_a', 'zzxa')$q$, '1');
+select t.ex('PANEL · un prefijo con caracteres raros se rechaza', '{D}', 'authenticated', $q$select * from public.admin_list_audit('x%'' or 1=1 --')$q$, 'ERR 22023%');
+select t.eq('PANEL · la bitácora se entrega con la acción más reciente primero', '{D}', 'authenticated',
+  $q$select (created_at = max(created_at) over ())::text from public.admin_list_audit(null, 5, 0) limit 1$q$, 'true');
+insert into public.conversations (id, user_id, subject, last_message_at) values ('d1010101-0000-4000-8000-000000000003', 'a1010101-0000-4000-8000-000000000004', 'Hilo largo', now());
+insert into public.messages (conversation_id, sender_id, body, created_at)
+  select 'd1010101-0000-4000-8000-000000000003', 'a1010101-0000-4000-8000-000000000004', 'm' || g, now() - interval '2 days' + g * interval '1 second' from generate_series(1, 205) g;
+select t.eq('PANEL · un hilo de 205 mensajes entrega los ÚLTIMOS 200, en orden, y dice cuántos hay en total', '{D}', 'authenticated',
+  $q$select jsonb_array_length(c->'messages')::text || '|' || (c->>'total_messages') || '|' || (c->'messages'->0->>'body') || '|' || (c->'messages'->199->>'body')
+       from (select public.admin_get_conversation('d1010101-0000-4000-8000-000000000003') c) x$q$, '200|205|m6|m205');
+select t.eq('PANEL · buscar «%» o «_» en aliados, guías y suscripciones se toma como texto literal (no devuelve todo)', '{D}', 'authenticated',
+  $q$select (select count(*) from public.admin_list_businesses(null, '%'))::text || (select count(*) from public.admin_list_businesses(null, '_'))::text
+       || (select count(*) from public.admin_list_guides('%'))::text || (select count(*) from public.admin_list_guides('_'))::text
+       || (select count(*) from public.admin_list_subscriptions('active', '%'))::text || (select count(*) from public.admin_list_subscriptions('active', '_'))::text$q$, '000000');
+select t.ex('PANEL · suspender con un motivo larguísimo', '{D}', 'authenticated',
+  $q$select public.admin_set_user_suspended('a1010101-0000-4000-8000-000000000004', true, repeat('m', 400))$q$, 'OK rows=1');
+select t.eq('PANEL · el motivo se recorta a 300 caracteres en el aviso y en la bitácora', null, 'service_role',
+  $q$select (select max(char_length(body)) from public.notifications where user_id = 'a1010101-0000-4000-8000-000000000004' and title = 'Tu cuenta fue suspendida')::text || '|'
+       || (select max(char_length(details->>'reason')) from public.admin_audit_log where action = 'user_suspend' and target_id = 'a1010101-0000-4000-8000-000000000004')::text$q$, '300|300');
+select t.ex('PANEL · y se reactiva sin motivo', '{D}', 'authenticated',
+  $q$select public.admin_set_user_suspended('a1010101-0000-4000-8000-000000000004', false)$q$, 'OK rows=1');
+insert into public.admin_audit_log (admin_id, action) select '{D}', 'zz_bulk' from generate_series(1, 130);
+select t.eq('PANEL · la bitácora tiene tope de 100 por página aunque se pidan más (con más de 100 líneas)', '{D}', 'authenticated',
+  $q$select count(*) from public.admin_list_audit(null, 100000, 0)$q$, '100');
+select t.ex('PANEL · el navegador no puede escribir ni borrar la bitácora (solo la leen los admin)', '{D}', 'authenticated', $q$delete from public.admin_audit_log$q$, 'ERR 42501%');
+select t.eq('PANEL · hacerse administrador sigue siendo imposible desde el navegador', '{A}', 'authenticated',
+  $q$select public.is_admin()::text$q$, 'false');
+
+-- =====================================================================
+select t.grupo('13 Invariantes globales de seguridad');
 -- =====================================================================
 select t.ok('TODAS las tablas de public y private tienen RLS activado',
   not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace

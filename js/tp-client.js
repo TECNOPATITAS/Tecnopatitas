@@ -268,7 +268,7 @@ async function fn(name, formData) {
 // Buckets: avatars y pet-photos son PRIVADOS (se ven con URL firmada temporal); qr-photos (la foto que la persona decide mostrar
 // en su placa) y business-media (logotipo y fotos de un aliado) son públicos por diseño. Las rutas válidas son
 // <id-de-usuario>/<nombre-de-archivo>.
-const BUCKETS = ['avatars', 'pet-photos', 'qr-photos', 'business-media'];
+const BUCKETS = ['avatars', 'pet-photos', 'qr-photos', 'business-media', 'complaint-evidence'];   // «complaint-evidence» es privado: solo administradores firman (leen) o borran; nadie sube desde el navegador (lo hace la función segura)
 const PUBLIC_BUCKETS = ['qr-photos', 'business-media'];
 const PATH_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9._-]{1,120}$/;
 function checkPath(bucket, path) {

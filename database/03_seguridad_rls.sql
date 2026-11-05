@@ -311,6 +311,25 @@ grant execute on function public.admin_cancel_subscription(uuid, text) to authen
 grant execute on function public.admin_renew_subscription(uuid, text) to authenticated;
 grant execute on function public.admin_set_subscription_dates(uuid, timestamptz, timestamptz) to authenticated;
 grant execute on function public.admin_resolve_plan_request(uuid, boolean, text, timestamptz) to authenticated;
+-- Panel de administración (Etapa 10).
+grant execute on function public.admin_get_user(uuid) to authenticated;
+grant execute on function public.admin_list_businesses(text, text, integer, integer) to authenticated;
+grant execute on function public.admin_get_business(uuid) to authenticated;
+grant execute on function public.admin_delete_promotion(uuid, text) to authenticated;
+grant execute on function public.admin_list_complaints(text, integer, integer) to authenticated;
+grant execute on function public.admin_get_complaint(uuid) to authenticated;
+grant execute on function public.admin_update_complaint(uuid, text, text, boolean, text, text) to authenticated;
+grant execute on function public.admin_list_guides(text, text, integer, integer) to authenticated;
+grant execute on function public.admin_get_guide(uuid) to authenticated;
+grant execute on function public.admin_save_guide(uuid, text, text, text, text, text, text, boolean) to authenticated;
+grant execute on function public.admin_delete_guide(uuid) to authenticated;
+grant execute on function public.admin_list_plan_requests(text, integer, integer) to authenticated;
+grant execute on function public.admin_list_subscriptions(text, text, integer, integer) to authenticated;
+grant execute on function public.admin_list_conversations(text, integer, integer) to authenticated;
+grant execute on function public.admin_get_conversation(uuid) to authenticated;
+grant execute on function public.admin_reply_conversation(uuid, text) to authenticated;
+grant execute on function public.admin_set_conversation_status(uuid, text) to authenticated;
+grant execute on function public.admin_list_audit(text, integer, integer) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Tiempo real (chat y notificaciones). Realtime respeta las políticas RLS.

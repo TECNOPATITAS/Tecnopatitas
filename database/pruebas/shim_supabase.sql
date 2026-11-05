@@ -22,7 +22,9 @@ create table auth.users (
   raw_user_meta_data jsonb not null default '{}'::jsonb,
   raw_app_meta_data  jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  banned_until timestamptz
+  banned_until timestamptz,
+  last_sign_in_at timestamptz,
+  email_confirmed_at timestamptz
 );
 
 create function auth.uid() returns uuid language sql stable as $$

@@ -893,7 +893,7 @@ begin
     perform private.notify(v_owner, 'mensaje', 'Nueva respuesta de atención al cliente', left(new.body, 140), 'chat.html');
   elsif v_prev is null or v_prev = 'staff' then
     perform private.notify_admins('mensaje', 'Atención al cliente: conversación esperando respuesta',
-                                  left(v_subject, 120), 'admin.html', 'chat-' || new.id::text);
+                                  left(v_subject, 120), 'admin.html#atencion', 'chat-' || new.id::text);
   end if;
   return new;
 end;
@@ -906,7 +906,7 @@ as $$
 begin
   perform private.notify_admins('aviso', 'Nueva denuncia recibida',
                                 'Código ' || new.tracking_code || ' · ' || replace(new.type, '_', ' ') || ' · ' || btrim(new.state),
-                                'admin.html', 'denuncia-' || new.id::text);
+                                'admin.html#denuncias', 'denuncia-' || new.id::text);
   return new;
 end;
 $$;
@@ -1485,7 +1485,10 @@ begin
     'complaints_pending',       (select count(*) from public.complaints where status in ('recibida', 'en_revision')),
     'conversations_unanswered', (select count(*) from public.conversations where status = 'abierta' and last_sender = 'user'),
     'active_subscriptions',     (select count(*) from public.subscriptions
-                                  where status = 'active' and starts_at <= now() and (ends_at is null or ends_at > now())));
+                                  where status = 'active' and starts_at <= now() and (ends_at is null or ends_at > now())),
+    'plan_requests_pending',    (select count(*) from public.plan_requests where status = 'pending'),
+    'suspended_users',          (select count(*) from public.profiles where is_suspended),
+    'conversations_open',       (select count(*) from public.conversations where status = 'abierta'));
 end;
 $$;
 
@@ -1779,7 +1782,7 @@ begin
     v_plan.name || ' · ' || case p_period when 'yearly' then 'anual' else 'mensual' end
       || ' · cuenta de ' || case when v_prof.account_type = 'business' then 'aliado' else 'dueño de mascota' end
       || ' · código ' || private.plan_request_code(v_id),
-    'admin.html', 'planreq-admin-' || v_id::text);
+    'admin.html#subs', 'planreq-admin-' || v_id::text);
   return v_id;
 end;
 $$;
@@ -1882,6 +1885,503 @@ begin
   select id, user_id, 'expired', plan_id from e;
   get diagnostics v_n = row_count;
   return v_n;
+end;
+$$;
+
+-- =====================================================================
+-- PANEL DE ADMINISTRACIÓN (Etapa 10)
+-- Todo lo que hace el panel pasa por estas funciones: cada una comprueba is_admin() DENTRO del servidor, valida con mensajes
+-- en español y deja registro en la bitácora. El navegador no necesita permisos directos sobre las tablas para administrar.
+-- Los roles de administrador NO se gestionan aquí: se asignan solo desde el SQL Editor (admin_roles).
+-- =====================================================================
+create or replace function private.like_pattern(p_q text)
+returns text language sql immutable set search_path = ''
+as $$
+  select case when nullif(btrim(coalesce(p_q, '')), '') is null then null
+              else '%' || replace(replace(replace(left(btrim(p_q), 80), '\', '\\'), '%', '\%'), '_', '\_') || '%' end;
+$$;
+
+-- Ficha de una cuenta para atención al cliente: solo datos de la cuenta y conteos (no el contenido de mascotas ni de chats).
+create or replace function public.admin_get_user(p_user uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare v jsonb;
+begin
+  perform private.require_admin();
+  select jsonb_build_object(
+      'id', p.id, 'email', u.email, 'display_name', p.display_name, 'account_type', p.account_type,
+      'is_suspended', p.is_suspended, 'created_at', p.created_at,
+      'last_sign_in_at', u.last_sign_in_at, 'email_confirmed', u.email_confirmed_at is not null,
+      'is_admin', exists (select 1 from public.admin_roles r where r.user_id = p.id),
+      'plan_id', private.effective_plan_id(p.id),
+      'subscription', (select jsonb_build_object('id', s.id, 'plan_id', s.plan_id, 'billing_period', s.billing_period,
+                                                  'starts_at', s.starts_at, 'ends_at', s.ends_at)
+                         from public.subscriptions s where s.user_id = p.id and s.status = 'active'
+                        order by s.starts_at desc limit 1),
+      'pending_request', (select jsonb_build_object('id', r.id, 'plan_id', r.plan_id, 'billing_period', r.billing_period, 'created_at', r.created_at)
+                            from public.plan_requests r where r.user_id = p.id and r.status = 'pending'),
+      'pets', (select count(*) from public.pets x where x.owner_id = p.id),
+      'businesses', (select count(*) from public.businesses b where b.owner_id = p.id),
+      'open_conversations', (select count(*) from public.conversations c where c.user_id = p.id and c.status = 'abierta'))
+    into v
+    from public.profiles p join auth.users u on u.id = p.id
+   where p.id = p_user;
+  if v is null then raise exception 'Usuario no encontrado.' using errcode = 'P0002'; end if;
+  return v;
+end;
+$$;
+
+-- ---- Aliados ----
+create or replace function public.admin_list_businesses(
+  p_status text default null, p_search text default null, p_limit integer default 25, p_offset integer default 0)
+returns table (id uuid, name text, category text, state text, municipality text, status text, verified boolean, is_demo boolean,
+               owner_id uuid, owner_email text, owner_name text, plan_id text, active_promotions bigint,
+               created_at timestamptz, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_q text := private.like_pattern(p_search);
+  v_limit integer := least(greatest(coalesce(p_limit, 25), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if p_status is not null and p_status not in ('pending', 'approved', 'suspended', 'rejected') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  return query
+    select b.id, b.name, b.category, b.state, b.municipality, b.status, b.verified, b.is_demo,
+           b.owner_id, u.email::text, p.display_name,
+           case when b.owner_id is null then null else private.effective_plan_id(b.owner_id) end,
+           (select count(*) from public.business_promotions bp
+             where bp.business_id = b.id and bp.is_active and bp.ends_on >= private.today_mx()),
+           b.created_at, count(*) over ()
+      from public.businesses b
+      left join public.profiles p on p.id = b.owner_id
+      left join auth.users u on u.id = b.owner_id
+     where (p_status is null or b.status = p_status)
+       and (v_q is null or b.name ilike v_q escape '\' or coalesce(b.municipality, '') ilike v_q escape '\' or coalesce(u.email, '') ilike v_q escape '\')
+     order by (b.status = 'pending') desc, b.created_at desc, b.id
+     limit v_limit offset v_off;
+end;
+$$;
+
+create or replace function public.admin_get_business(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare v jsonb;
+begin
+  perform private.require_admin();
+  select jsonb_build_object(
+      'id', b.id, 'name', b.name, 'category', b.category, 'description', b.description, 'address', b.address,
+      'state', b.state, 'municipality', b.municipality, 'phone', b.phone, 'whatsapp_url', b.whatsapp_url,
+      'maps_query', b.maps_query, 'hours', b.hours, 'has_logo', b.logo_path is not null, 'photos', cardinality(b.photo_paths),
+      'status', b.status, 'verified', b.verified, 'verified_at', b.verified_at, 'is_demo', b.is_demo,
+      'created_at', b.created_at, 'updated_at', b.updated_at,
+      'owner', case when b.owner_id is null then null
+                    else jsonb_build_object('id', b.owner_id, 'email', u.email, 'display_name', p.display_name, 'is_suspended', p.is_suspended) end,
+      'plan', (select jsonb_build_object('id', pl.id, 'name', pl.name, 'verified_badge_eligible', pl.verified_badge_eligible)
+                 from private.plan_for(b.owner_id) pl),
+      'promotions', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'title', x.title, 'description', x.description,
+                                      'starts_on', x.starts_on, 'ends_on', x.ends_on, 'is_active', x.is_active) order by x.created_at desc)
+                                from (select bp.* from public.business_promotions bp where bp.business_id = b.id
+                                       order by bp.created_at desc limit 20) x), '[]'::jsonb))
+    into v
+    from public.businesses b
+    left join public.profiles p on p.id = b.owner_id
+    left join auth.users u on u.id = b.owner_id
+   where b.id = p_id;
+  if v is null then raise exception 'Establecimiento no encontrado.' using errcode = 'P0002'; end if;
+  return v;
+end;
+$$;
+
+-- Moderación: borra una promoción (el dueño la podría reactivar si solo se ocultara). Avisa al dueño con el motivo.
+create or replace function public.admin_delete_promotion(p_promo uuid, p_reason text default null)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_biz uuid; v_title text; v_owner uuid;
+begin
+  perform private.require_admin();
+  delete from public.business_promotions bp where bp.id = p_promo returning bp.business_id, bp.title into v_biz, v_title;
+  if not found then raise exception 'Promoción no encontrada.' using errcode = 'P0002'; end if;
+  select b.owner_id into v_owner from public.businesses b where b.id = v_biz;
+  perform private.audit('promotion_delete', 'business_promotions', p_promo::text,
+                        jsonb_build_object('business', v_biz, 'title', left(v_title, 100), 'reason', left(p_reason, 300)));
+  if v_owner is not null then
+    perform private.notify(v_owner, 'aviso', 'Se retiró una promoción', left(coalesce(nullif(btrim(p_reason), ''), 'No cumplía las reglas del directorio.'), 300), 'panel-aliado.html');
+  end if;
+end;
+$$;
+
+-- ---- Denuncias ----
+create or replace function public.admin_list_complaints(p_status text default null, p_limit integer default 25, p_offset integer default 0)
+returns table (id uuid, tracking_code text, type text, status text, priority text, attended boolean, state text, municipality text,
+               approx_date date, photos integer, excerpt text, created_at timestamptz, updated_at timestamptz, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_limit integer := least(greatest(coalesce(p_limit, 25), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if p_status is not null and p_status not in ('pendientes', 'recibida', 'en_revision', 'en_proceso', 'canalizada', 'cerrada') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  return query
+    select c.id, c.tracking_code, c.type, c.status, c.priority, c.attended, c.state, c.municipality, c.approx_date,
+           cardinality(c.photo_paths), left(c.description, 160), c.created_at, c.updated_at, count(*) over ()
+      from public.complaints c
+     where p_status is null
+        or (p_status = 'pendientes' and c.status in ('recibida', 'en_revision'))
+        or c.status = p_status
+     order by c.created_at desc, c.id
+     limit v_limit offset v_off;
+end;
+$$;
+
+create or replace function public.admin_get_complaint(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare v jsonb;
+begin
+  perform private.require_admin();
+  select to_jsonb(c) into v from public.complaints c where c.id = p_id;
+  if v is null then raise exception 'Denuncia no encontrada.' using errcode = 'P0002'; end if;
+  return v;
+end;
+$$;
+
+-- Estado, prioridad, seguimiento y notas. El contenido original NO se puede cambiar (lo impide además un disparador).
+-- «public_update» lo ve cualquier persona que tenga el código de seguimiento; «internal_notes» solo el equipo.
+create or replace function public.admin_update_complaint(
+  p_id uuid, p_status text, p_priority text default null, p_attended boolean default false,
+  p_public_update text default null, p_internal_notes text default null)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_pub text := nullif(btrim(coalesce(p_public_update, '')), ''); v_int text := nullif(btrim(coalesce(p_internal_notes, '')), '');
+begin
+  perform private.require_admin();
+  if p_status is null or p_status not in ('recibida', 'en_revision', 'en_proceso', 'canalizada', 'cerrada') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  if p_priority is not null and p_priority not in ('baja', 'media', 'alta', 'urgente') then
+    raise exception 'Prioridad no válida.' using errcode = '22023';
+  end if;
+  if char_length(coalesce(v_pub, '')) > 500 then
+    raise exception 'La actualización pública admite hasta 500 caracteres.' using errcode = 'P0001';
+  end if;
+  if char_length(coalesce(v_int, '')) > 4000 then
+    raise exception 'Las notas internas admiten hasta 4000 caracteres.' using errcode = 'P0001';
+  end if;
+  update public.complaints c
+     set status = p_status, priority = p_priority, attended = coalesce(p_attended, false),
+         public_update = v_pub, internal_notes = v_int
+   where c.id = p_id;
+  if not found then raise exception 'Denuncia no encontrada.' using errcode = 'P0002'; end if;
+end;
+$$;
+
+-- ---- Guías de cuidado ----
+create or replace function public.admin_list_guides(p_search text default null, p_state text default null, p_limit integer default 25, p_offset integer default 0)
+returns table (id uuid, slug text, title text, category text, is_published boolean, published_at timestamptz,
+               author_source text, updated_at timestamptz, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_q text := private.like_pattern(p_search);
+  v_limit integer := least(greatest(coalesce(p_limit, 25), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if p_state is not null and p_state not in ('published', 'draft') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  return query
+    select g.id, g.slug, g.title, g.category, g.is_published, g.published_at, g.author_source, g.updated_at, count(*) over ()
+      from public.care_guides g
+     where (p_state is null or (p_state = 'published') = g.is_published)
+       and (v_q is null or g.title ilike v_q escape '\' or g.slug ilike v_q escape '\')
+     order by g.updated_at desc, g.id
+     limit v_limit offset v_off;
+end;
+$$;
+
+create or replace function public.admin_get_guide(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare v jsonb;
+begin
+  perform private.require_admin();
+  select jsonb_build_object('id', g.id, 'slug', g.slug, 'title', g.title, 'summary', g.summary, 'content', g.content,
+                            'category', g.category, 'author_source', g.author_source, 'is_published', g.is_published,
+                            'published_at', g.published_at, 'updated_at', g.updated_at)
+    into v from public.care_guides g where g.id = p_id;
+  if v is null then raise exception 'Guía no encontrada.' using errcode = 'P0002'; end if;
+  return v;
+end;
+$$;
+
+-- Crea (p_id nulo) o edita una guía. Publicar es una decisión explícita: una guía nueva queda como borrador salvo que se pida publicarla.
+create or replace function public.admin_save_guide(
+  p_id uuid, p_slug text, p_title text, p_summary text, p_content text, p_category text,
+  p_author_source text default '', p_publish boolean default false)
+returns uuid language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_slug text := lower(btrim(coalesce(p_slug, ''))); v_title text := btrim(coalesce(p_title, ''));
+  v_summary text := btrim(coalesce(p_summary, '')); v_content text := btrim(coalesce(p_content, ''));
+  v_source text := btrim(coalesce(p_author_source, '')); v_id uuid; v_was boolean;
+begin
+  perform private.require_admin();
+  if v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' or char_length(v_slug) > 120 then
+    raise exception 'La dirección de la guía solo admite minúsculas, números y guiones (hasta 120 caracteres).' using errcode = 'P0001';
+  end if;
+  if char_length(v_title) not between 3 and 160 then raise exception 'El título debe tener entre 3 y 160 caracteres.' using errcode = 'P0001'; end if;
+  if char_length(v_summary) > 300 then raise exception 'El resumen admite hasta 300 caracteres.' using errcode = 'P0001'; end if;
+  if char_length(v_content) not between 1 and 20000 then raise exception 'El contenido debe tener entre 1 y 20000 caracteres.' using errcode = 'P0001'; end if;
+  if p_category is null or p_category not in ('perros', 'gatos', 'aves', 'conejos', 'pequenos-mamiferos', 'alimentacion', 'higiene',
+                                              'vacunacion', 'salud-preventiva', 'comportamiento') then
+    raise exception 'Categoría no válida.' using errcode = '22023';
+  end if;
+  if char_length(v_source) > 200 then raise exception 'La fuente admite hasta 200 caracteres.' using errcode = 'P0001'; end if;
+  begin
+    if p_id is null then
+      insert into public.care_guides (slug, title, summary, content, category, author_source, is_published, published_at)
+      values (v_slug, v_title, v_summary, v_content, p_category, v_source, coalesce(p_publish, false),
+              case when p_publish then now() end)
+      returning id into v_id;
+    else
+      select g.is_published into v_was from public.care_guides g where g.id = p_id for update;
+      if not found then raise exception 'Guía no encontrada.' using errcode = 'P0002'; end if;
+      update public.care_guides g
+         set slug = v_slug, title = v_title, summary = v_summary, content = v_content, category = p_category, author_source = v_source,
+             is_published = coalesce(p_publish, false),
+             published_at = case when coalesce(p_publish, false) and not v_was then now() else g.published_at end
+       where g.id = p_id;
+      v_id := p_id;
+    end if;
+  exception when unique_violation then
+    raise exception 'Ya existe otra guía con esa dirección.' using errcode = 'P0001';
+  end;
+  return v_id;
+end;
+$$;
+
+create or replace function public.admin_delete_guide(p_id uuid)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  delete from public.care_guides g where g.id = p_id;
+  if not found then raise exception 'Guía no encontrada.' using errcode = 'P0002'; end if;
+end;
+$$;
+
+-- Bitácora de cambios en guías (las haga el panel o el SQL Editor con sesión). No registra el contenido, solo quién, qué y cuál.
+create or replace function private.guide_audit()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if private.is_backend() then return coalesce(new, old); end if;      -- carga inicial / SQL Editor: sin sesión no hay a quién atribuirlo
+  if tg_op = 'INSERT' then
+    perform private.audit('guide_create', 'care_guides', new.id::text, jsonb_build_object('slug', new.slug, 'published', new.is_published));
+  elsif tg_op = 'UPDATE' then
+    perform private.audit(case when new.is_published and not old.is_published then 'guide_publish'
+                               when old.is_published and not new.is_published then 'guide_unpublish'
+                               else 'guide_update' end,
+                          'care_guides', new.id::text, jsonb_build_object('slug', new.slug, 'published', new.is_published));
+  else
+    perform private.audit('guide_delete', 'care_guides', old.id::text, jsonb_build_object('slug', old.slug));
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+drop trigger if exists tp_audit on public.care_guides;
+create trigger tp_audit after insert or update or delete on public.care_guides for each row execute function private.guide_audit();
+
+-- ---- Suscripciones y solicitudes de plan ----
+create or replace function public.admin_list_plan_requests(p_status text default 'pending', p_limit integer default 25, p_offset integer default 0)
+returns table (id uuid, code text, user_id uuid, email text, display_name text, account_type text, plan_id text, plan_name text,
+               billing_period text, status text, user_note text, admin_note text, created_at timestamptz, resolved_at timestamptz,
+               current_plan_id text, current_ends_at timestamptz, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_limit integer := least(greatest(coalesce(p_limit, 25), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if p_status is not null and p_status not in ('pending', 'approved', 'rejected', 'cancelled') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  return query
+    select r.id, private.plan_request_code(r.id), r.user_id, u.email::text, p.display_name, p.account_type, r.plan_id, pl.name,
+           r.billing_period, r.status, r.user_note, r.admin_note, r.created_at, r.resolved_at,
+           private.effective_plan_id(r.user_id),
+           (select s.ends_at from public.subscriptions s where s.user_id = r.user_id and s.status = 'active' order by s.starts_at desc limit 1),
+           count(*) over ()
+      from public.plan_requests r
+      join public.profiles p on p.id = r.user_id
+      join auth.users u on u.id = r.user_id
+      join public.subscription_plans pl on pl.id = r.plan_id
+     where p_status is null or r.status = p_status
+     order by case when r.status = 'pending' then r.created_at end asc nulls last, coalesce(r.resolved_at, r.created_at) desc, r.id
+     limit v_limit offset v_off;
+end;
+$$;
+
+create or replace function public.admin_list_subscriptions(
+  p_status text default 'active', p_search text default null, p_limit integer default 25, p_offset integer default 0)
+returns table (id uuid, user_id uuid, email text, display_name text, account_type text, plan_id text, plan_name text,
+               billing_period text, status text, starts_at timestamptz, ends_at timestamptz, days_left integer, note text, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_q text := private.like_pattern(p_search);
+  v_limit integer := least(greatest(coalesce(p_limit, 25), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if p_status is not null and p_status not in ('active', 'expiring', 'expired', 'cancelled', 'replaced') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  return query
+    select s.id, s.user_id, u.email::text, p.display_name, p.account_type, s.plan_id, pl.name, s.billing_period, s.status,
+           s.starts_at, s.ends_at,
+           case when s.ends_at is null then null else ceil(extract(epoch from (s.ends_at - now())) / 86400)::integer end,
+           s.note, count(*) over ()
+      from public.subscriptions s
+      join public.profiles p on p.id = s.user_id
+      join auth.users u on u.id = s.user_id
+      join public.subscription_plans pl on pl.id = s.plan_id
+     where (p_status is null
+            or (p_status = 'expiring' and s.status = 'active' and s.ends_at is not null and s.ends_at <= now() + interval '15 days')
+            or s.status = p_status)
+       and (v_q is null or u.email ilike v_q escape '\' or p.display_name ilike v_q escape '\')
+     order by case when p_status in ('active', 'expiring') then s.ends_at end asc nulls last, s.created_at desc, s.id
+     limit v_limit offset v_off;
+end;
+$$;
+
+-- ---- Atención al cliente (chat) ----
+create or replace function public.admin_list_conversations(p_filter text default 'pending', p_limit integer default 25, p_offset integer default 0)
+returns table (id uuid, subject text, status text, last_sender text, last_message_at timestamptz, created_at timestamptz,
+               user_id uuid, display_name text, email text, message_count bigint, last_body text, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_limit integer := least(greatest(coalesce(p_limit, 25), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if p_filter is null or p_filter not in ('pending', 'open', 'closed', 'all') then
+    raise exception 'Filtro no válido.' using errcode = '22023';
+  end if;
+  return query
+    select c.id, c.subject, c.status, c.last_sender, c.last_message_at, c.created_at, c.user_id, p.display_name, u.email::text,
+           (select count(*) from public.messages m where m.conversation_id = c.id),
+           (select left(m.body, 140) from public.messages m where m.conversation_id = c.id order by m.created_at desc, m.id desc limit 1),
+           count(*) over ()
+      from public.conversations c
+      join public.profiles p on p.id = c.user_id
+      join auth.users u on u.id = c.user_id
+     where p_filter = 'all'
+        or (p_filter = 'pending' and c.status = 'abierta' and c.last_sender = 'user')
+        or (p_filter = 'open' and c.status = 'abierta')
+        or (p_filter = 'closed' and c.status = 'cerrada')
+     order by case when p_filter = 'pending' then c.last_message_at end asc nulls last, c.last_message_at desc, c.id
+     limit v_limit offset v_off;
+end;
+$$;
+
+create or replace function public.admin_get_conversation(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare v jsonb; v_total bigint;
+begin
+  perform private.require_admin();
+  select count(*) into v_total from public.messages m where m.conversation_id = p_id;
+  select jsonb_build_object(
+      'id', c.id, 'subject', c.subject, 'status', c.status, 'last_sender', c.last_sender,
+      'last_message_at', c.last_message_at, 'created_at', c.created_at,
+      'user', jsonb_build_object('id', p.id, 'display_name', p.display_name, 'email', u.email, 'is_suspended', p.is_suspended),
+      'total_messages', v_total,
+      'messages', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'sender_role', x.sender_role, 'body', x.body, 'created_at', x.created_at)
+                                             order by x.created_at, x.id)
+                              from (select m.* from public.messages m where m.conversation_id = c.id
+                                     order by m.created_at desc, m.id desc limit 200) x), '[]'::jsonb))
+    into v
+    from public.conversations c
+    join public.profiles p on p.id = c.user_id
+    join auth.users u on u.id = c.user_id
+   where c.id = p_id;
+  if v is null then raise exception 'Conversación no encontrada.' using errcode = 'P0002'; end if;
+  return v;
+end;
+$$;
+
+-- Responde como «equipo». Los disparadores fijan el remitente y el rol; responder reabre una conversación cerrada y avisa a la persona.
+create or replace function public.admin_reply_conversation(p_conversation uuid, p_body text)
+returns uuid language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_body text := btrim(coalesce(p_body, '')); v_id uuid;
+begin
+  perform private.require_admin();
+  if char_length(v_body) not between 1 and 2000 then
+    raise exception 'El mensaje debe tener entre 1 y 2000 caracteres.' using errcode = 'P0001';
+  end if;
+  if not exists (select 1 from public.conversations c where c.id = p_conversation) then
+    raise exception 'Conversación no encontrada.' using errcode = 'P0002';
+  end if;
+  insert into public.messages (conversation_id, body) values (p_conversation, v_body) returning id into v_id;
+  return v_id;
+end;
+$$;
+
+create or replace function public.admin_set_conversation_status(p_conversation uuid, p_status text)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  if p_status is null or p_status not in ('abierta', 'cerrada') then
+    raise exception 'Estado no válido.' using errcode = '22023';
+  end if;
+  update public.conversations c set status = p_status where c.id = p_conversation;
+  if not found then raise exception 'Conversación no encontrada.' using errcode = 'P0002'; end if;
+  perform private.audit('conversation_status', 'conversations', p_conversation::text, jsonb_build_object('status', p_status));
+end;
+$$;
+
+-- ---- Bitácora ----
+create or replace function public.admin_list_audit(p_prefix text default null, p_limit integer default 50, p_offset integer default 0)
+returns table (id bigint, created_at timestamptz, action text, target_table text, target_id text, details jsonb,
+               admin_id uuid, admin_name text, admin_email text, total_count bigint)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  v_pre text := nullif(btrim(coalesce(p_prefix, '')), '');
+  v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 100);
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+begin
+  perform private.require_admin();
+  if v_pre is not null and v_pre !~ '^[a-z_]{1,30}$' then
+    raise exception 'Filtro no válido.' using errcode = '22023';
+  end if;
+  return query
+    select a.id, a.created_at, a.action, a.target_table, a.target_id, a.details, a.admin_id, p.display_name, u.email::text, count(*) over ()
+      from public.admin_audit_log a
+      left join public.profiles p on p.id = a.admin_id
+      left join auth.users u on u.id = a.admin_id
+     where v_pre is null or a.action like replace(v_pre, '_', '\_') || '%' escape '\'
+     order by a.created_at desc, a.id desc
+     limit v_limit offset v_off;
 end;
 $$;
 
@@ -2199,6 +2699,25 @@ grant execute on function public.admin_cancel_subscription(uuid, text) to authen
 grant execute on function public.admin_renew_subscription(uuid, text) to authenticated;
 grant execute on function public.admin_set_subscription_dates(uuid, timestamptz, timestamptz) to authenticated;
 grant execute on function public.admin_resolve_plan_request(uuid, boolean, text, timestamptz) to authenticated;
+-- Panel de administración (Etapa 10).
+grant execute on function public.admin_get_user(uuid) to authenticated;
+grant execute on function public.admin_list_businesses(text, text, integer, integer) to authenticated;
+grant execute on function public.admin_get_business(uuid) to authenticated;
+grant execute on function public.admin_delete_promotion(uuid, text) to authenticated;
+grant execute on function public.admin_list_complaints(text, integer, integer) to authenticated;
+grant execute on function public.admin_get_complaint(uuid) to authenticated;
+grant execute on function public.admin_update_complaint(uuid, text, text, boolean, text, text) to authenticated;
+grant execute on function public.admin_list_guides(text, text, integer, integer) to authenticated;
+grant execute on function public.admin_get_guide(uuid) to authenticated;
+grant execute on function public.admin_save_guide(uuid, text, text, text, text, text, text, boolean) to authenticated;
+grant execute on function public.admin_delete_guide(uuid) to authenticated;
+grant execute on function public.admin_list_plan_requests(text, integer, integer) to authenticated;
+grant execute on function public.admin_list_subscriptions(text, text, integer, integer) to authenticated;
+grant execute on function public.admin_list_conversations(text, integer, integer) to authenticated;
+grant execute on function public.admin_get_conversation(uuid) to authenticated;
+grant execute on function public.admin_reply_conversation(uuid, text) to authenticated;
+grant execute on function public.admin_set_conversation_status(uuid, text) to authenticated;
+grant execute on function public.admin_list_audit(text, integer, integer) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Tiempo real (chat y notificaciones). Realtime respeta las políticas RLS.

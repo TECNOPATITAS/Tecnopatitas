@@ -27,7 +27,12 @@ exp_auth_fn as (select unnest(array[
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
   'cancel_my_subscription','directory_get','directory_search','directory_track','get_public_pet_profile','is_active_user','is_admin',
   'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','start_conversation','storage_has_room','track_complaint','generate_my_reminders',
-  'request_plan','cancel_plan_request','admin_resolve_plan_request']) as f),
+  'request_plan','cancel_plan_request','admin_resolve_plan_request',
+  -- Panel de administración (Etapa 10): todas comprueban is_admin() en el servidor
+  'admin_get_user','admin_list_businesses','admin_get_business','admin_delete_promotion','admin_list_complaints','admin_get_complaint',
+  'admin_update_complaint','admin_list_guides','admin_get_guide','admin_save_guide','admin_delete_guide','admin_list_plan_requests',
+  'admin_list_subscriptions','admin_list_conversations','admin_get_conversation','admin_reply_conversation','admin_set_conversation_status',
+  'admin_list_audit']) as f),
 checks(n, grupo, comprobacion, ok, detalle) as (values
   -- ---------------- Estructura ----------------
   (10, 'Estructura', 'Existen las 20 tablas de la plataforma en "public"',
@@ -41,10 +46,10 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     (select count(*) from tbl where nspname = 'private') = 3, (select string_agg(relname, ', ') from tbl where nspname = 'private')),
   (12, 'Estructura', 'El disparador de registro (tp_new_user) existe en auth.users',
     exists (select 1 from pg_trigger where tgrelid = 'auth.users'::regclass and tgname = 'tp_new_user' and not tgisinternal and tgenabled <> 'D'), null),
-  (13, 'Estructura', 'Existen los 25 disparadores de protección (carnet, QR, aliados, chat, denuncias…)',
+  (13, 'Estructura', 'Existen los 26 disparadores de protección (carnet, QR, aliados, chat, denuncias…)',
     (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'tp\_%' and t.tgenabled <> 'D') = 25,
-    (select count(*)::text || ' de 25 activos' from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'tp\_%' and t.tgenabled <> 'D') = 26,
+    (select count(*)::text || ' de 26 activos' from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'tp\_%' and t.tgenabled <> 'D')),
 
   -- ---------------- RLS ----------------
@@ -68,7 +73,7 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_public_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute'))),
-  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 27 funciones previstas',
+  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 45 funciones previstas',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_auth_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')
@@ -87,10 +92,10 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
   (36, 'Permisos', 'El esquema "private" es inaccesible desde la API',
     not (has_schema_privilege('anon', 'private', 'usage') or has_schema_privilege('authenticated', 'private', 'usage')), null),
 
-  (37, 'Permisos', 'Las 10 funciones de administración comprueban en el servidor que quien llama es admin',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%') = 10
+  (37, 'Permisos', 'Las 28 funciones de administración comprueban en el servidor que quien llama es admin',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%') = 28
     and (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and p.proname = 'require_admin' and p.prosrc like '%public.is_admin()%') = 1,
-    (select count(*)::text || ' de 10 funciones protegidas' from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%')),
+    (select count(*)::text || ' de 28 funciones protegidas' from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%')),
   (38, 'Permisos', 'Solicitudes de plan: el navegador solo puede LEER las suyas; se crean, cancelan y resuelven con funciones del servidor',
     (select relrowsecurity from pg_class where oid = 'public.plan_requests'::regclass)
       and has_table_privilege('authenticated', 'public.plan_requests', 'select')
