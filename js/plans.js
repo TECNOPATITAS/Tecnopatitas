@@ -1,4 +1,8 @@
-/* Planes del modelo de negocio. En la Etapa 9 se leerán de la tabla subscription_plans. */
+/* Planes del modelo de negocio (Etapa 9).
+   · El catálogo se muestra a todo el mundo sin consultar Supabase (los visitantes no hacen peticiones solo por mirar los planes).
+     Lo que SÍ se aplica en el servidor (límites, permisos) sale de la tabla subscription_plans; una prueba automática
+     comprueba que este catálogo coincide con ella (identificador, nombre, precios y beneficios).
+   · Con sesión iniciada, js/pages/planes.js añade tu plan actual, tus solicitudes y los botones «Solicitar» (TPPlans.cta). */
 const PLANS=[
 {id:'basica',g:0,n:'Huellita Básica',s:'Plan Comunidad',m:0,a:0,t:'Comenzar gratis',b:['Acceso ilimitado a guías informativas de cuidados principales','Acceso al módulo de denuncias de maltrato animal, diseñado para permitir reportes anónimos','Consulta del directorio general de aliados locales con nombre y dirección']},
 {id:'pro',g:0,n:'Huellita Pro',s:'Plan Cuidadores',m:29,a:290,pop:1,t:'Elegir Huellita Pro',b:['Todos los beneficios del plan gratuito','Carnet de Salud Digital interactivo para hasta 2 mascotas, con vacunas, desparasitaciones y citas','Recordatorios automáticos previstos por WhatsApp o correo electrónico','Descuentos exclusivos del 5 % al 10 % en la red de aliados locales']},
@@ -6,10 +10,31 @@ const PLANS=[
 {id:'plata',g:1,n:'Huellita de Plata',s:'Plan Aliado Inicial',m:149,a:1490,t:'Registrar mi negocio',b:['Ficha completa en el directorio con nombre, dirección, teléfono, horario y logotipo','Ubicación mediante mapa interactivo','Publicación de hasta una promoción o servicio destacado al mes']},
 {id:'oro',g:1,n:'Huellita de Oro',s:'Plan Aliado Premium',m:299,a:2990,t:'Elegir plan Premium',b:['Todos los beneficios del directorio comercial','Posicionamiento prioritario','Etiqueta «Aliado Verificado / Recomendado», cuando corresponda','Botón directo a WhatsApp','Publicación ilimitada de promociones','Difusión mensual en las redes sociales oficiales de TECNOPATITAS']}];
 const mxn=n=>'$'+n.toLocaleString('es-MX')+' MXN';
-function renderPlans(sel,g,yearly){const el=document.querySelector(sel);if(!el)return;
-el.innerHTML=PLANS.filter(p=>p.g===g).map(p=>{const pr=yearly?p.a:p.m,ah=p.m*12-p.a,q=g?'tipo=aliado&':'';
-return `<article class="card${p.pop?' pop':''}">${p.pop?'<span class="tag" style="background:var(--pk)">Más popular</span>':''}<h3>${p.n}</h3><small>${p.s}</small><div class="price">${mxn(pr)}<small>${pr?(yearly?' /año':' /mes'):' · gratis'}</small></div>${ah?`<small>Anual: ${mxn(p.a)} · ahorras ${mxn(ah)} al año frente a 12 pagos mensuales</small>`:''}<ul>${p.b.map(x=>'<li>'+x+'</li>').join('')}</ul><div class="row"><a class="btn coral" href="registro.html?${q}plan=${p.id}">${p.t}</a></div></article>`}).join('')}
-const mini=document.querySelector('#plans-mini');
-if(mini)mini.innerHTML=PLANS.map(p=>`<a class="card" href="planes.html"><h3>${p.n}</h3><small>${p.g?'Aliados comerciales':'Dueños de mascotas'}</small><div class="price">${mxn(p.m)}<small>${p.m?' /mes':' · gratis'}</small></div></a>`).join('');
-if(document.querySelector('#pu')){let y=false;const go=()=>{renderPlans('#pu',0,y);renderPlans('#pb',1,y)};go();
-document.querySelectorAll('[data-bill]').forEach(b=>b.onclick=()=>{y=b.dataset.bill==='y';document.querySelectorAll('[data-bill]').forEach(x=>x.setAttribute('aria-pressed',x===b));go()})}
+const TPPlans={PLANS,mxn,yearly:false,cta:null,render(){
+  const E=window.TPUI&&window.TPUI.el;
+  [['#pu',0],['#pb',1]].forEach(([sel,g])=>{
+    const host=document.querySelector(sel);if(!host||!E)return;
+    host.replaceChildren(...PLANS.filter(p=>p.g===g).map(p=>{
+      const yearly=TPPlans.yearly,pr=yearly?p.a:p.m,ah=p.m*12-p.a,q=g?'tipo=aliado&':'';
+      const custom=TPPlans.cta?TPPlans.cta(p,yearly):null;
+      return E('article',{class:'card'+(p.pop?' pop':''),dataset:{plan:p.id}},
+        p.pop?E('span',{class:'tag pk',text:'Más popular'}):null,
+        E('h3',{text:p.n}),E('small',{text:p.s}),
+        E('div',{class:'price'},mxn(pr),E('small',{text:pr?(yearly?' /año':' /mes'):' · gratis'})),
+        ah?E('small',{text:'Anual: '+mxn(p.a)+' · ahorras '+mxn(ah)+' al año frente a 12 pagos mensuales'}):null,
+        E('ul',null,...p.b.map(x=>E('li',{text:x}))),
+        E('div',{class:'row'},custom||E('a',{class:'btn coral',href:'registro.html?'+q+'plan='+p.id,text:p.t})));
+    }));
+  });
+}};
+window.TPPlans=TPPlans;
+function init(){
+  const mini=document.querySelector('#plans-mini');
+  if(mini)mini.innerHTML=PLANS.map(p=>`<a class="card" href="planes.html"><h3>${p.n}</h3><small>${p.g?'Aliados comerciales':'Dueños de mascotas'}</small><div class="price">${mxn(p.m)}<small>${p.m?' /mes':' · gratis'}</small></div></a>`).join('');
+  if(document.querySelector('#pu')){
+    TPPlans.render();
+    document.querySelectorAll('[data-bill]').forEach(b=>b.onclick=()=>{TPPlans.yearly=b.dataset.bill==='y';document.querySelectorAll('[data-bill]').forEach(x=>x.setAttribute('aria-pressed',x===b));TPPlans.render()});
+  }
+}
+/* Se dibuja cuando termina de cargar la página, para que planes.js (con sesión) pueda poner sus botones antes del primer dibujo. */
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();

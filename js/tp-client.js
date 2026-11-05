@@ -41,7 +41,7 @@ const MESSAGES = {
   invalid_credentials: 'Correo o contraseña incorrectos.',
   email_not_confirmed: 'Todavía no confirmas tu correo. Revisa tu bandeja de entrada y la carpeta de spam.',
   weak_password: 'La contraseña es demasiado débil. Usa al menos 10 caracteres y evita contraseñas comunes.',
-  over_email_send_rate_limit: 'Se alcanzó el límite de correos por hora del servicio gratuito. Inténtalo de nuevo en una hora.',
+  over_email_send_rate_limit: 'Se enviaron demasiados correos en poco tiempo. Espera un par de minutos e inténtalo de nuevo; si sigue igual, vuelve a intentarlo más tarde (hay un tope de correos por hora).',
   over_request_rate_limit: 'Demasiados intentos. Espera unos minutos antes de volver a intentarlo.',
   email_address_not_authorized: 'Por ahora el servicio de correo solo envía mensajes a cuentas de prueba autorizadas. Estamos configurando el envío para todo el público.',
   signup_disabled: 'El registro está desactivado temporalmente.',

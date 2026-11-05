@@ -25,7 +25,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'profiles', 'admin_roles', 'subscription_plans', 'subscriptions', 'subscription_events',
+    'profiles', 'admin_roles', 'subscription_plans', 'subscriptions', 'subscription_events', 'plan_requests',
     'pets', 'pet_vaccinations', 'pet_deworming', 'pet_appointments', 'pet_qr_profiles',
     'businesses', 'business_promotions', 'business_daily_stats', 'complaints', 'conversations', 'messages',
     'notifications', 'care_guides', 'admin_audit_log'] loop
@@ -78,6 +78,12 @@ select pg_temp.pol('public.subscriptions', 'subs_select', $p$
   using (user_id = (select auth.uid()) or (select public.is_admin())) $p$);
 select pg_temp.pol('public.subscription_events', 'subevents_select', $p$
   create policy subevents_select on public.subscription_events for select to authenticated
+  using (user_id = (select auth.uid()) or (select public.is_admin())) $p$);
+
+-- Solicitudes de plan: la persona ve las suyas (el equipo, todas). Se crean, cancelan y resuelven solo con funciones.
+grant select on public.plan_requests to authenticated;
+select pg_temp.pol('public.plan_requests', 'planreq_select', $p$
+  create policy planreq_select on public.plan_requests for select to authenticated
   using (user_id = (select auth.uid()) or (select public.is_admin())) $p$);
 
 -- ---------------------------------------------------------------------
@@ -286,6 +292,8 @@ grant execute on function public.submit_complaint(text, text, date, text, text, 
 grant execute on function public.is_admin(), public.is_active_user(), public.is_business_account() to authenticated;
 grant execute on function public.my_entitlements() to authenticated;
 grant execute on function public.cancel_my_subscription() to authenticated;
+grant execute on function public.request_plan(text, text, text) to authenticated;
+grant execute on function public.cancel_plan_request(uuid) to authenticated;
 grant execute on function public.regenerate_pet_qr_token(uuid) to authenticated;
 grant execute on function public.storage_has_room(text, integer) to authenticated;
 grant execute on function public.has_qr_plan() to authenticated;
@@ -302,6 +310,7 @@ grant execute on function public.admin_assign_subscription(uuid, text, text, tim
 grant execute on function public.admin_cancel_subscription(uuid, text) to authenticated;
 grant execute on function public.admin_renew_subscription(uuid, text) to authenticated;
 grant execute on function public.admin_set_subscription_dates(uuid, timestamptz, timestamptz) to authenticated;
+grant execute on function public.admin_resolve_plan_request(uuid, boolean, text, timestamptz) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Tiempo real (chat y notificaciones). Realtime respeta las políticas RLS.

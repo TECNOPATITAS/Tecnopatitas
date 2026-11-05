@@ -208,7 +208,7 @@ with sync_playwright() as pw:
     check('Aliado en admin.html: acceso denegado', 'Acceso restringido' in pg.inner_text('#main'))
     check('Páginas protegidas: el contenido no fue visible antes de la verificación (aliado)', pg.evaluate("sessionStorage.getItem('__leak')") is None)
     pg.goto(f'{ORIGIN}/perfil.html'); pg.wait_for_selector('body.tp-ok')
-    check('Perfil del aliado: plan sin asignar explicado con honestidad', 'Sin plan de aliado' in pg.inner_text('#p-plan') and 'no está habilitada' in pg.inner_text('#p-plan'), pg.inner_text('#p-plan'))
+    check('Perfil del aliado: plan sin asignar explicado con honestidad', 'Sin plan de aliado' in pg.inner_text('#p-plan') and 'no hay cobros' in pg.inner_text('#p-plan'), pg.inner_text('#p-plan'))
     check('Menú del aliado: sin Mis mascotas, con Panel de aliado', not pg.locator('.side a[href="mascota.html"]').is_visible() and pg.locator('.side a[href="panel-aliado.html"]').is_visible())
     ctx.close()
     ctx, log, pg = fresh(); pg.goto(f'{ORIGIN}/login.html'); fill_login(pg, 'admin@ejemplo.mx', 'ClaveAdmin123'); pg.wait_for_url(re.compile(r'admin\.html'), timeout=4000)

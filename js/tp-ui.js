@@ -32,6 +32,11 @@ window.TPUI=Object.freeze({
   MESES:['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'],
   /* 'AAAA-MM-DD' → '4 nov 2026' (sin convertir zonas horarias) */
   dateEs(d){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d||'');return m?(+m[3])+' '+this.MESES[+m[2]-1]+' '+m[1]:''},
+  /* Fecha (sin hora) de un instante, en horario de Ciudad de México: '4 dic 2026'. Es la misma que escribe el servidor en los avisos. */
+  dateMx(iso){
+    const d=new Date(iso);if(isNaN(d))return '';
+    return this.dateEs(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(d));
+  },
   /* Fecha y hora en horario de Ciudad de México */
   dateTimeEs(iso){
     const d=new Date(iso);if(isNaN(d))return '';

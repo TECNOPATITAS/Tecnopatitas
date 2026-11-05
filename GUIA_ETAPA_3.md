@@ -38,6 +38,8 @@ El sitio ya exige **10 caracteres como mínimo** al registrarse, pero eso es sol
 
 ## Paso 4 · Correos: la limitación real del plan gratuito (**léelo**)
 
+> **Actualización (Etapa 9):** ya elegiste Gmail. La versión completa y actualizada de este paso (límites, contraseña de aplicación, plantillas en español, pruebas y fallos comunes) está en **`GUIA_CORREOS_GMAIL.md`**. Sigue esa guía; lo de abajo queda como contexto.
+
 Supabase trae un servicio de correo de cortesía **solo para probar**, con dos límites:
 
 - **Solo envía a los correos de tu equipo de Supabase** (es decir, el tuyo y los de quienes invites a tu organización). A cualquier otra persona le llega el error `email_address_not_authorized`.

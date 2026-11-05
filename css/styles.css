@@ -198,3 +198,24 @@ label.inline{display:flex;gap:10px;align-items:center;margin:0}label.inline sele
 .nt-fs:disabled{opacity:.6}
 .nt-card .ck input{width:20px;height:20px;flex:0 0 auto}
 @media(max-width:900px){.bell{order:2}#mbtn{order:3}.nt-card .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}.nt-card .ck{min-height:44px}.nt-item{padding:10px;gap:10px}}
+/* Etapa 9: Suscripciones con sesión (tu plan, solicitudes sin pagos, historial) */
+.tag.pk{background:var(--pk)}
+.mine{margin:0 0 28px}.mine h2{margin-bottom:.4em}.mine h2:focus{outline:none}
+.mine-card{margin-bottom:14px;gap:8px}.mine-card h3{margin:0}.mine-card p{margin:0}
+.mine-plan{font-size:1.25rem;color:var(--pt)}.mine-plan small{font-size:.9rem}
+.rq-pend{border:2px solid var(--lv);background:var(--lv2)}
+.rq-confirm{border:2px solid var(--pt);border-radius:14px;background:var(--pk2);padding:12px 14px}
+.rq-confirm p{margin:0 0 8px}
+.mine-hist h3{margin:14px 0 8px}
+.rq-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rq-item{background:#fff;border:1px solid var(--ln);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.rq-top{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.rq-st{display:inline-block;padding:2px 12px;border-radius:99px;font-size:.8rem;font-weight:800;border:1px solid var(--pt);color:var(--pt)}
+.rq-st.pending{background:var(--lv)}.rq-st.ok{background:var(--mn)}.rq-st.no{background:var(--pk2);border-color:var(--rose);color:var(--rose)}.rq-st.off{background:#fff;color:var(--mut);border-color:var(--bd)}
+.rq-n{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.rq-form{flex:1 1 100%;display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--bd);padding-top:10px;margin-top:6px;min-width:0}
+.rq-form fieldset{border:0;margin:0;padding:0;min-width:0}.rq-form legend{font-weight:800;color:var(--pt);padding:0;margin-bottom:4px}
+.rq-form .ck input{width:20px;height:20px;flex:0 0 auto}.rq-form .rq-r{margin-bottom:4px}
+.rq-form label{margin-bottom:0}.rq-form textarea{resize:vertical;min-height:84px}
+.rq-form .row{margin-top:4px;padding-top:0}
+@media(max-width:900px){.mine .btn,#pu .btn,#pb .btn,body[data-page=planes] .tools .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}.rq-form .ck{min-height:44px}}

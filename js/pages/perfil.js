@@ -17,7 +17,7 @@ const TIPOS={owner:'Dueño de mascota',business:'Aliado comercial'};
     const ent=await TP.rpc('my_entitlements');
     const plan=ent&&ent.plan;
     $('p-plan').textContent=plan?plan.name+(plan.tagline?' · '+plan.tagline:''):
-      (m.accountType==='business'?'Sin plan de aliado (lo asigna un administrador; la contratación aún no está habilitada)':'Huellita Básica');
+      (m.accountType==='business'?'Sin plan de aliado todavía (puedes pedirlo en Mi suscripción; no hay cobros)':'Huellita Básica');
   }catch{$('p-plan').textContent='No se pudo consultar tu plan en este momento.'}
   /* ---- Foto de perfil (bucket privado «avatars»: se ve con una URL firmada temporal) ---- */
   const MEDIA=window.TPMedia,P=window.TPPets;

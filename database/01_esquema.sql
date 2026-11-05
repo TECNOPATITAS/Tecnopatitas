@@ -102,6 +102,26 @@ create table if not exists public.subscription_events (
 create index if not exists subscription_events_user_idx on public.subscription_events (user_id, created_at desc);
 
 -- ---------------------------------------------------------------------
+-- Solicitudes de plan (Etapa 9). La persona pide un plan; el equipo la aprueba o la rechaza.
+-- No hay pagos: aprobar una solicitud no cobra nada. Solo se escribe mediante funciones del servidor.
+-- ---------------------------------------------------------------------
+create table if not exists public.plan_requests (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references public.profiles (id) on delete cascade,
+  plan_id         text not null references public.subscription_plans (id),
+  billing_period  text not null default 'monthly' check (billing_period in ('monthly', 'yearly')),
+  status          text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  user_note       text check (user_note is null or char_length(user_note) <= 300),
+  admin_note      text check (admin_note is null or char_length(admin_note) <= 500),
+  resolved_by     uuid references auth.users (id) on delete set null,
+  resolved_at     timestamptz,
+  created_at      timestamptz not null default now(),
+  check ((status = 'pending') = (resolved_at is null))
+);
+create unique index if not exists plan_requests_one_pending on public.plan_requests (user_id) where status = 'pending';
+create index if not exists plan_requests_user_idx on public.plan_requests (user_id, created_at desc);
+
+-- ---------------------------------------------------------------------
 -- Mascotas y carnet de salud
 -- ---------------------------------------------------------------------
 create table if not exists public.pets (

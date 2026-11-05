@@ -38,7 +38,7 @@ function render(host, ctx, row) {
   if (!row) {                                                 // todavía no existe la placa
     if (!hasPlan) {
       host.replaceChildren(title, intro(), el('p', { class: 'note' }, 'La placa QR se incluye en ', el('b', { text: 'Huellita VIP' }),
-        '. Los planes de pago aún no se contratan en línea; por ahora los asigna un administrador. ', el('a', { href: 'planes.html', text: 'Ver planes' }), '.'));
+        '. Todavía no hay pagos en línea: puedes pedir un plan y el equipo lo activa a mano, sin cargos. ', el('a', { href: 'planes.html', text: 'Ver planes' }), '.'));
       return;
     }
     const btn = el('button', { class: 'btn coral sm', type: 'button', text: 'Crear placa QR', disabled: suspended });

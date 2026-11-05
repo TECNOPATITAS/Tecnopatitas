@@ -236,12 +236,12 @@ async function deleteRead(){
 }
 function setFilter(f){filter=f;resetConfirm();render()}
 
-/* ---------- Recordatorios (vacunas, desparasitaciones y citas) ---------- */
+/* ---------- Recordatorios (vacunas, desparasitaciones y citas) y avisos de vencimiento del plan ---------- */
 function markDay(){
   try{localStorage.setItem('tp-rem-v1:'+me.user.id,new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()))}catch{/* */}
 }
 async function runReminders(){
-  if(remBusy||!me||me.accountType!=='owner')return;
+  if(remBusy||!me)return;
   remBusy=true;
   try{
     const n=await TP.rpc('generate_my_reminders');

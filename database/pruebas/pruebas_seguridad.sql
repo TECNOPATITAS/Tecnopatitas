@@ -896,7 +896,222 @@ select t.eq('Quien apagó los avisos de mensajes (I) ya no recibe estos; D sí',
   '{I}:2,{D}:3');
 
 -- =====================================================================
-select t.grupo('11 Invariantes globales de seguridad');
+select t.grupo('11 Solicitudes de plan, renovaciones y vencimientos (Etapa 9)');
+-- =====================================================================
+-- S1 dueña · S2 dueña suspendida · S3 aliada · S4 límite diario · S5 historial · S6, S7, S9 vencimientos (dueñas) · S8 aliada con vencimiento
+insert into auth.users (id, email, raw_user_meta_data) values
+ ('e9e9e9e9-0000-4000-8000-000000000001', 'sol@prueba.mx',    '{"display_name":"Sol"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000002', 'sofia@prueba.mx',  '{"display_name":"Sofía"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000003', 'sara@prueba.mx',   '{"display_name":"Sara","account_type":"business"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000004', 'saul@prueba.mx',   '{"display_name":"Saúl"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000005', 'selena@prueba.mx', '{"display_name":"Selena"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000006', 'silvia@prueba.mx', '{"display_name":"Silvia"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000007', 'sergio@prueba.mx', '{"display_name":"Sergio"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000008', 'sonia@prueba.mx',  '{"display_name":"Sonia","account_type":"business"}'),
+ ('e9e9e9e9-0000-4000-8000-000000000009', 'simon@prueba.mx',  '{"display_name":"Simón"}');
+update public.profiles set is_suspended = true where id = 'e9e9e9e9-0000-4000-8000-000000000002';
+
+-- Acceso y estructura
+select t.ex('Un visitante anónimo NO puede solicitar un plan', null, 'anon', $q$select public.request_plan('pro')$q$, 'ERR 42501%');
+select t.ex('Un visitante anónimo NO puede ver solicitudes', null, 'anon', $q$select * from public.plan_requests$q$, 'ERR 42501%');
+select t.ok('plan_requests tiene RLS activado y el navegador solo puede LEER la tabla',
+  (select c.relrowsecurity from pg_class c where c.oid = 'public.plan_requests'::regclass)
+  and has_table_privilege('authenticated', 'public.plan_requests', 'select')
+  and not has_any_column_privilege('authenticated', 'public.plan_requests', 'insert,update')
+  and not has_table_privilege('authenticated', 'public.plan_requests', 'delete')
+  and not has_any_column_privilege('anon', 'public.plan_requests', 'select,insert,update'));
+
+-- Solicitar
+select t.ex('S1 solicita Huellita Pro mensual con un mensaje', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('pro', 'monthly', '  Quiero el carnet para mi perrita  ')$q$, 'OK rows=1');
+select t.eq('La solicitud queda pendiente, con el plan, el periodo y el mensaje recortado', null, 'service_role',
+  $q$select status || '|' || plan_id || '|' || billing_period || '|' || user_note || '|' || (resolved_at is null)::text from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001'$q$,
+  'pending|pro|monthly|Quiero el carnet para mi perrita|true');
+select t.eq('S1 ve su solicitud', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select count(*) from public.plan_requests$q$, '1');
+select t.eq('S4 (otra persona) NO ve la solicitud de S1', 'e9e9e9e9-0000-4000-8000-000000000004', 'authenticated', $q$select count(*) from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001'$q$, '0');
+select t.eq('Un administrador sí ve la solicitud de S1', '{D}', 'authenticated', $q$select count(*) from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001'$q$, '1');
+select t.ex('S1 NO puede crear una solicitud con INSERT directo', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$insert into public.plan_requests (user_id, plan_id) values ('e9e9e9e9-0000-4000-8000-000000000001', 'vip')$q$, 'ERR 42501%');
+select t.ex('S1 NO puede aprobarse su propia solicitud con UPDATE', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$update public.plan_requests set status = 'approved', resolved_at = now()$q$, 'ERR 42501%');
+select t.ex('S1 NO puede borrar solicitudes', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$delete from public.plan_requests$q$, 'ERR 42501%');
+select t.ex('Una segunda solicitud mientras hay una pendiente se rechaza con un mensaje claro', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('vip')$q$, 'ERR P0001%solicitud pendiente%');
+select t.eq('La persona recibe un aviso de «suscripción» sin cargos ni pagos', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and type = 'suscripcion' and title = 'Recibimos tu solicitud: Huellita Pro' and body like '%ningún cargo%' and link = 'planes.html'$q$, '1');
+select t.eq('Los DOS administradores reciben el aviso, con plan, periodo, tipo de cuenta y código', null, 'postgres',
+  $q$select count(*) from public.notifications n, public.plan_requests r
+     where r.user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and n.type = 'aviso' and n.title = 'Nueva solicitud de plan' and n.user_id in ('{D}', '{I}')
+       and n.body = 'Huellita Pro · mensual · cuenta de dueño de mascota · código ' || private.plan_request_code(r.id) and n.link = 'admin.html'$q$, '2');
+select t.eq('El aviso al equipo NO incluye correo ni nombre de quien lo pidió', null, 'service_role',
+  $q$select count(*) from public.notifications where title = 'Nueva solicitud de plan' and (body ilike '%prueba.mx%' or body ilike '%Sol%')$q$, '0');
+select t.eq('Quien no es del equipo no recibe avisos de solicitudes', null, 'service_role',
+  $q$select count(*) from public.notifications where title = 'Nueva solicitud de plan' and user_id not in ('{D}', '{I}')$q$, '0');
+
+-- Validaciones (aunque haya una solicitud pendiente, estas se revisan primero)
+select t.ex('Un plan de aliado no corresponde a una dueña', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('oro')$q$, 'ERR P0001%no corresponde%');
+select t.ex('Un plan de dueños no corresponde a una aliada', 'e9e9e9e9-0000-4000-8000-000000000003', 'authenticated', $q$select public.request_plan('vip')$q$, 'ERR P0001%no corresponde%');
+select t.ex('Huellita Básica no se solicita (es gratuita)', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('basica')$q$, 'ERR P0001%gratuita%');
+select t.ex('Un plan que no existe se rechaza', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('diamante')$q$, 'ERR P0002%');
+select t.ex('Un periodo inválido se rechaza', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('pro', 'semanal')$q$, 'ERR 22023%');
+select t.ex('Un mensaje de más de 300 caracteres se rechaza', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('pro', 'monthly', repeat('x', 301))$q$, 'ERR 22023%');
+select t.ex('Una cuenta suspendida no puede solicitar planes', 'e9e9e9e9-0000-4000-8000-000000000002', 'authenticated', $q$select public.request_plan('pro')$q$, 'ERR P0001%suspendida%');
+select t.ex('La base impide dos solicitudes pendientes de la misma persona (aunque se salte la función)', null, 'service_role',
+  $q$insert into public.plan_requests (user_id, plan_id) values ('e9e9e9e9-0000-4000-8000-000000000001', 'vip')$q$, 'ERR 23505%');
+select t.ex('La base impide una solicitud «aprobada» sin fecha de resolución', null, 'service_role',
+  $q$insert into public.plan_requests (user_id, plan_id, status) values ('e9e9e9e9-0000-4000-8000-000000000004', 'pro', 'approved')$q$, 'ERR 23514%');
+
+-- Cancelar
+select t.ex('S4 NO puede cancelar la solicitud de S1', 'e9e9e9e9-0000-4000-8000-000000000004', 'authenticated',
+  $q$select public.cancel_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'))$q$, 'ERR P0001%');
+do $$
+declare v_id uuid; r text;
+begin
+  select id into v_id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending';
+  r := t.x('e9e9e9e9-0000-4000-8000-000000000004', 'authenticated', format('select public.cancel_plan_request(%L)', v_id));
+  perform t.ok('S4 NO puede cancelar la solicitud de S1 ni conociendo su identificador exacto', r like 'ERR P0001%', r);
+end $$;
+select t.eq('La solicitud de S1 sigue pendiente', null, 'service_role', $q$select status from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001'$q$, 'pending');
+select t.ex('Un visitante anónimo NO puede cancelar solicitudes', null, 'anon', $q$select public.cancel_plan_request(gen_random_uuid())$q$, 'ERR 42501%');
+select t.ex('S1 cancela su solicitud', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated',
+  $q$select public.cancel_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'))$q$, 'OK rows=1');
+select t.eq('Queda «cancelled» con fecha de resolución', null, 'service_role', $q$select status || '|' || (resolved_at is not null)::text from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001'$q$, 'cancelled|true');
+select t.ex('Cancelar otra vez da un error claro', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated',
+  $q$select public.cancel_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' limit 1))$q$, 'ERR P0001%');
+
+-- Aprobar (SQL Editor / equipo)
+select t.ex('S1 vuelve a solicitar, ahora Huellita VIP anual', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('vip', 'yearly')$q$, 'OK rows=1');
+select t.ex('Ni siquiera service_role puede llamar a la resolución interna desde la API', null, 'service_role',
+  $q$select private.resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'), true)$q$, 'ERR 42501%');
+select t.ex('S1 NO puede aprobarse con la función de administración', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated',
+  $q$select public.admin_resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'), true)$q$, 'ERR 42501%');
+select t.ex('Un visitante anónimo NO puede resolver solicitudes', null, 'anon', $q$select public.admin_resolve_plan_request(gen_random_uuid(), true)$q$, 'ERR 42501%');
+select t.ex('El equipo aprueba desde el SQL Editor (sin sesión)', null, 'postgres',
+  $q$select private.resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'), true, 'Aprobada en la prueba')$q$, 'OK rows=1');
+select t.eq('La solicitud queda aprobada con la nota y la fecha del equipo', null, 'service_role',
+  $q$select status || '|' || admin_note || '|' || (resolved_at is not null)::text from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status <> 'cancelled'$q$, 'approved|Aprobada en la prueba|true');
+select t.eq('S1 ahora tiene Huellita VIP', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.my_entitlements() -> 'plan' ->> 'id'$q$, 'vip');
+select t.eq('La suscripción es anual y vence en ~1 año', null, 'service_role',
+  $q$select (billing_period = 'yearly' and ends_at > now() + interval '360 days' and ends_at < now() + interval '370 days')::text from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'active'$q$, 'true');
+select t.eq('La nota de la suscripción recuerda de qué solicitud viene', null, 'postgres',
+  $q$select (note like 'Solicitud ' || private.plan_request_code((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'approved')) || '%')::text from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'active'$q$, 'true');
+select t.eq('S1 recibe el aviso con la fecha hasta la que está vigente', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and type = 'suscripcion' and title = 'Tu suscripción cambió' and body like 'Ahora tienes Huellita VIP. Vigente hasta el % 20%.'$q$, '1');
+select t.ex('Resolver otra vez la misma solicitud se rechaza', null, 'postgres',
+  $q$select private.resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'approved'), false)$q$, 'ERR P0001%ya fue resuelta%');
+select t.ex('Resolver una solicitud que no existe se rechaza', null, 'postgres', $q$select private.resolve_plan_request(gen_random_uuid(), true)$q$, 'ERR P0002%');
+
+-- Mismo plan: no se puede pedir mientras falten más de 15 días; sí para renovar
+select t.ex('S1 NO puede pedir el plan que ya tiene vigente por todo un año', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('vip')$q$, 'ERR P0001%Ya tienes ese plan vigente%');
+update public.subscriptions set ends_at = now() + interval '10 days' where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'active';
+select t.ex('Con 10 días por vencer, S1 sí puede pedir la renovación', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('vip', 'monthly')$q$, 'OK rows=1');
+select t.eq('Aprobar la renovación EXTIENDE la misma suscripción (no crea otra)', null, 'postgres',
+  $q$select (private.resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'), true, 'Renovada') = (select id from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'active'))::text$q$, 'true');
+select t.eq('S1 sigue con una sola suscripción activa, mensual, que ahora vence en ~40 días (10 que quedaban + 1 mes)', null, 'service_role',
+  $q$select count(*) || '|' || bool_and(billing_period = 'monthly' and ends_at > now() + interval '38 days' and ends_at < now() + interval '42 days')::text
+       from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'active'$q$, '1|true');
+select t.eq('Queda el evento «renewed» y el aviso de renovación', null, 'service_role',
+  $q$select (select count(*) from public.subscription_events where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and event = 'renewed')
+          || '|' || (select count(*) from public.notifications where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and title = 'Tu suscripción fue renovada' and body like 'Huellita VIP: vigente hasta el %')$q$, '1|1');
+
+-- Cambiar de plan (bajar de VIP a Pro) y rechazar
+select t.ex('Con VIP vigente S1 puede pedir pasar a Pro', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('pro')$q$, 'OK rows=1');
+select t.ex('El equipo la aprueba con la función de administración (D, con sesión)', '{D}', 'authenticated',
+  $q$select public.admin_resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'pending'), true, 'Cambio a Pro')$q$, 'OK rows=1');
+select t.eq('Pro reemplaza a VIP: 1 activa Pro, 1 VIP «replaced» (la renovación no creó otra), 1 evento «changed»', null, 'service_role',
+  $q$select (select plan_id from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'active') || '|'
+          || (select count(*) from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and status = 'replaced') || '|'
+          || (select count(*) from public.subscription_events where user_id = 'e9e9e9e9-0000-4000-8000-000000000001' and event = 'changed')$q$, 'pro|1|1');
+select t.eq('La resolución por un administrador queda en la bitácora con su identidad', null, 'service_role',
+  $q$select count(*) from public.admin_audit_log where action = 'plan_request_approve' and admin_id = '{D}' and details ->> 'plan' = 'pro'$q$, '1');
+select t.eq('...y quién la resolvió', null, 'service_role', $q$select resolved_by::text from public.plan_requests where admin_note = 'Cambio a Pro'$q$, '{D}');
+select t.ex('S3 (aliada) solicita Huellita de Plata anual', 'e9e9e9e9-0000-4000-8000-000000000003', 'authenticated', $q$select public.request_plan('plata', 'yearly', 'Veterinaria en Guadalajara')$q$, 'OK rows=1');
+select t.eq('El aviso al equipo dice «cuenta de aliado»', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{D}' and title = 'Nueva solicitud de plan' and body like 'Huellita de Plata · anual · cuenta de aliado · código %'$q$, '1');
+select t.ex('D rechaza la solicitud de S3 con una nota', '{D}', 'authenticated',
+  $q$select public.admin_resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000003' and status = 'pending'), false, 'Falta confirmar tu negocio')$q$, 'OK rows=1');
+select t.eq('Rechazar NO crea ninguna suscripción', null, 'service_role', $q$select count(*) from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000003'$q$, '0');
+select t.eq('S3 sigue sin plan', 'e9e9e9e9-0000-4000-8000-000000000003', 'authenticated', $q$select (public.my_entitlements() -> 'plan')::text$q$, 'null');
+select t.eq('S3 recibe el rechazo con la nota del equipo', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = 'e9e9e9e9-0000-4000-8000-000000000003' and type = 'suscripcion' and title = 'Tu solicitud de Huellita de Plata no fue aprobada' and body = 'Falta confirmar tu negocio'$q$, '1');
+select t.eq('S3 ve su solicitud rechazada con la respuesta del equipo', 'e9e9e9e9-0000-4000-8000-000000000003', 'authenticated',
+  $q$select status || '|' || admin_note from public.plan_requests$q$, 'rejected|Falta confirmar tu negocio');
+select t.ex('Tras un rechazo S3 puede volver a solicitar', 'e9e9e9e9-0000-4000-8000-000000000003', 'authenticated', $q$select public.request_plan('plata')$q$, 'OK rows=1');
+select t.ex('D aprueba y fija la fecha de término a la mano', '{D}', 'authenticated',
+  $q$select public.admin_resolve_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000003' and status = 'pending'), true, null, now() + interval '45 days')$q$, 'OK rows=1');
+select t.eq('La fecha fijada por el equipo se respeta', null, 'service_role',
+  $q$select (ends_at > now() + interval '44 days' and ends_at < now() + interval '46 days')::text from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000003' and status = 'active'$q$, 'true');
+select t.eq('Con Plata S3 sí tiene plan de aliado', 'e9e9e9e9-0000-4000-8000-000000000003', 'authenticated', $q$select public.my_entitlements() -> 'plan' ->> 'id'$q$, 'plata');
+
+-- Cancelar la suscripción sigue funcionando y permite volver a pedir
+select t.ex('S1 cancela su suscripción de Pro', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.cancel_my_subscription()$q$, 'OK rows=1');
+select t.ex('Después de cancelar S1 puede pedir otra vez Pro', 'e9e9e9e9-0000-4000-8000-000000000001', 'authenticated', $q$select public.request_plan('pro')$q$, 'OK rows=1');
+
+-- Tope diario: 5 solicitudes por persona al día
+do $$
+declare i integer; r text;
+begin
+  for i in 1..5 loop
+    perform t.x('e9e9e9e9-0000-4000-8000-000000000004', 'authenticated', $x$select public.request_plan('pro')$x$);
+    perform t.x('e9e9e9e9-0000-4000-8000-000000000004', 'authenticated', $x$select public.cancel_plan_request((select id from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000004' and status = 'pending'))$x$);
+  end loop;
+end $$;
+select t.eq('Después de 5 solicitudes en un día S4 tiene 5 registros cancelados', null, 'service_role', $q$select count(*) from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000004' and status = 'cancelled'$q$, '5');
+select t.ex('La sexta solicitud del día se rechaza', 'e9e9e9e9-0000-4000-8000-000000000004', 'authenticated', $q$select public.request_plan('pro')$q$, 'ERR P0001%Demasiadas solicitudes%');
+select t.eq('La solicitud rechazada por el límite no deja nada guardado', null, 'service_role', $q$select count(*) from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000004' and status = 'pending'$q$, '0');
+
+-- Historial: se conservan las 20 más recientes
+insert into public.plan_requests (user_id, plan_id, status, resolved_at, created_at)
+select 'e9e9e9e9-0000-4000-8000-000000000005', 'pro', 'rejected', now() - (g || ' days')::interval + interval '1 hour', now() - (g || ' days')::interval from generate_series(1, 25) g;
+select t.ex('S5 solicita con 25 solicitudes viejas ya resueltas', 'e9e9e9e9-0000-4000-8000-000000000005', 'authenticated', $q$select public.request_plan('vip')$q$, 'OK rows=1');
+select t.eq('Quedan 20 en total: la nueva pendiente y las 19 más recientes', null, 'service_role',
+  $q$select count(*) || '|' || count(*) filter (where status = 'pending') || '|' || (min(created_at) > now() - interval '20 days')::text from public.plan_requests where user_id = 'e9e9e9e9-0000-4000-8000-000000000005'$q$, '20|1|true');
+
+-- Vencimientos: avisos una sola vez
+select t.ex('Función auxiliar: fecha en español de México', null, 'postgres', $q$select private.fecha_es('2026-12-04 12:00+00')$q$, 'OK rows=1');
+select t.eq('Formato de fecha «4 dic 2026»', null, 'postgres', $q$select private.fecha_es('2026-12-04 12:00+00')$q$, '4 dic 2026');
+insert into public.subscriptions (user_id, plan_id, starts_at, ends_at) values ('e9e9e9e9-0000-4000-8000-000000000006', 'pro', now() - interval '25 days', now() + interval '5 days');
+select t.ok('S6 pide sus recordatorios y recibe 1 aviso de que su plan vence pronto',
+  (select t.q('e9e9e9e9-0000-4000-8000-000000000006', 'authenticated', $q$select public.generate_my_reminders()$q$)) = '1');
+select t.eq('El aviso nombra el plan y la fecha, y no menciona cargos', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = 'e9e9e9e9-0000-4000-8000-000000000006' and type = 'suscripcion' and title = 'Huellita Pro vence pronto' and body like 'Vigente hasta el % 20%. Puedes solicitar la renovación en Suscripciones; no genera ningún cargo.' and link = 'planes.html'$q$, '1');
+select t.eq('Pedirlos otra vez no repite el aviso', 'e9e9e9e9-0000-4000-8000-000000000006', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+update public.subscriptions set ends_at = now() - interval '2 days' where user_id = 'e9e9e9e9-0000-4000-8000-000000000006';
+select t.eq('Al vencer, S6 recibe un aviso de que venció', 'e9e9e9e9-0000-4000-8000-000000000006', 'authenticated', $q$select public.generate_my_reminders()$q$, '1');
+select t.eq('...con el título «venció»', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = 'e9e9e9e9-0000-4000-8000-000000000006' and title = 'Huellita Pro venció' and body like 'Venció el %'$q$, '1');
+select t.eq('La suscripción de S6 quedó marcada «expired» y con su evento', null, 'service_role',
+  $q$select (select status from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000006') || '|' || (select count(*) from public.subscription_events where user_id = 'e9e9e9e9-0000-4000-8000-000000000006' and event = 'expired')$q$, 'expired|1');
+select t.eq('Con el plan vencido S6 vuelve a Huellita Básica', 'e9e9e9e9-0000-4000-8000-000000000006', 'authenticated', $q$select public.my_entitlements() -> 'plan' ->> 'id'$q$, 'basica');
+select t.eq('Pedirlos de nuevo no repite el aviso de vencido', 'e9e9e9e9-0000-4000-8000-000000000006', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+
+-- Sin avisos falsos
+insert into public.subscriptions (user_id, plan_id, starts_at, ends_at, status) values ('e9e9e9e9-0000-4000-8000-000000000007', 'pro', now() - interval '40 days', now() - interval '3 days', 'expired');
+insert into public.subscriptions (user_id, plan_id, starts_at, ends_at) values ('e9e9e9e9-0000-4000-8000-000000000007', 'vip', now() - interval '2 days', now() + interval '60 days');
+select t.eq('Si ya tiene otro plan vigente no se avisa del que venció', 'e9e9e9e9-0000-4000-8000-000000000007', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+insert into public.subscriptions (user_id, plan_id, starts_at, ends_at) values ('e9e9e9e9-0000-4000-8000-000000000009', 'pro', now() - interval '22 days', now() + interval '8 days');
+select t.eq('Con 8 días por delante todavía no se avisa', 'e9e9e9e9-0000-4000-8000-000000000009', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+update public.subscriptions set ends_at = now() - interval '31 days', starts_at = now() - interval '61 days' where user_id = 'e9e9e9e9-0000-4000-8000-000000000009';
+select t.eq('Un vencimiento de hace más de 30 días ya no se avisa', 'e9e9e9e9-0000-4000-8000-000000000009', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+-- Preferencias
+update public.subscriptions set ends_at = now() + interval '3 days', starts_at = now() - interval '27 days', status = 'active' where user_id = 'e9e9e9e9-0000-4000-8000-000000000009';
+update public.profiles set notification_prefs = notification_prefs || '{"suscripcion": false}' where id = 'e9e9e9e9-0000-4000-8000-000000000009';
+select t.eq('Si apagó los avisos de suscripción no se crea ninguno', 'e9e9e9e9-0000-4000-8000-000000000009', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+update public.profiles set notification_prefs = notification_prefs || '{"suscripcion": true}' where id = 'e9e9e9e9-0000-4000-8000-000000000009';
+select t.eq('Al volver a activarlos, el aviso sí aparece', 'e9e9e9e9-0000-4000-8000-000000000009', 'authenticated', $q$select public.generate_my_reminders()$q$, '1');
+-- Cuentas de aliado
+insert into public.subscriptions (user_id, plan_id, starts_at, ends_at) values ('e9e9e9e9-0000-4000-8000-000000000008', 'oro', now() - interval '27 days', now() + interval '3 days');
+select t.eq('Una cuenta de aliado también recibe el aviso de vencimiento', 'e9e9e9e9-0000-4000-8000-000000000008', 'authenticated', $q$select public.generate_my_reminders()$q$, '1');
+select t.eq('El aviso de S8 no marca como vencidas las suscripciones de otras personas (solo sigue la que ya estaba vencida)', null, 'service_role',
+  $q$select count(*) from public.subscriptions where user_id in ('e9e9e9e9-0000-4000-8000-000000000008', 'e9e9e9e9-0000-4000-8000-000000000009', 'e9e9e9e9-0000-4000-8000-000000000007') and status = 'expired'$q$, '1');
+-- Una renovación a otra fecha vuelve a avisar
+update public.subscriptions set ends_at = now() + interval '2 days' where user_id = 'e9e9e9e9-0000-4000-8000-000000000006';
+update public.subscriptions set status = 'active' where user_id = 'e9e9e9e9-0000-4000-8000-000000000006';
+select t.eq('Si la fecha cambia (renovación) y vuelve a estar por vencer, se avisa de nuevo', 'e9e9e9e9-0000-4000-8000-000000000006', 'authenticated', $q$select public.generate_my_reminders()$q$, '1');
+-- El vencimiento solo toca a quien pide sus recordatorios
+insert into public.subscriptions (user_id, plan_id, starts_at, ends_at) values ('e9e9e9e9-0000-4000-8000-000000000002', 'pro', now() - interval '40 days', now() - interval '1 day');
+select t.eq('S4 pide sus recordatorios (no tiene nada que avisar)', 'e9e9e9e9-0000-4000-8000-000000000004', 'authenticated', $q$select public.generate_my_reminders()$q$, '0');
+select t.eq('Pedir recordatorios NO marca como vencida la suscripción atrasada de otra persona', null, 'service_role',
+  $q$select status from public.subscriptions where user_id = 'e9e9e9e9-0000-4000-8000-000000000002'$q$, 'active');
+
+-- =====================================================================
+select t.grupo('12 Invariantes globales de seguridad');
 -- =====================================================================
 select t.ok('TODAS las tablas de public y private tienen RLS activado',
   not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace

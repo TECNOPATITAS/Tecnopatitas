@@ -26,14 +26,15 @@ exp_auth_fn as (select unnest(array[
   'admin_assign_subscription','admin_cancel_subscription','admin_dashboard_stats','admin_list_users','admin_renew_subscription',
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
   'cancel_my_subscription','directory_get','directory_search','directory_track','get_public_pet_profile','is_active_user','is_admin',
-  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','start_conversation','storage_has_room','track_complaint','generate_my_reminders']) as f),
+  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','start_conversation','storage_has_room','track_complaint','generate_my_reminders',
+  'request_plan','cancel_plan_request','admin_resolve_plan_request']) as f),
 checks(n, grupo, comprobacion, ok, detalle) as (values
   -- ---------------- Estructura ----------------
-  (10, 'Estructura', 'Existen las 19 tablas de la plataforma en "public"',
-    (select count(*) from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events',
+  (10, 'Estructura', 'Existen las 20 tablas de la plataforma en "public"',
+    (select count(*) from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events','plan_requests',
        'pets','pet_vaccinations','pet_deworming','pet_appointments','pet_qr_profiles','businesses','business_promotions','business_daily_stats','complaints',
-       'conversations','messages','notifications','care_guides','admin_audit_log')) = 19,
-    (select count(*)::text || ' de 19 encontradas' from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events',
+       'conversations','messages','notifications','care_guides','admin_audit_log')) = 20,
+    (select count(*)::text || ' de 20 encontradas' from tbl where nspname = 'public' and relname in ('profiles','admin_roles','subscription_plans','subscriptions','subscription_events','plan_requests',
        'pets','pet_vaccinations','pet_deworming','pet_appointments','pet_qr_profiles','businesses','business_promotions','business_daily_stats','complaints',
        'conversations','messages','notifications','care_guides','admin_audit_log'))),
   (11, 'Estructura', 'Existen las 3 tablas internas del esquema "private"',
@@ -67,7 +68,7 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_public_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute'))),
-  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 24 funciones previstas',
+  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 27 funciones previstas',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_auth_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')
@@ -86,10 +87,19 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
   (36, 'Permisos', 'El esquema "private" es inaccesible desde la API',
     not (has_schema_privilege('anon', 'private', 'usage') or has_schema_privilege('authenticated', 'private', 'usage')), null),
 
-  (37, 'Permisos', 'Las 9 funciones de administración comprueban en el servidor que quien llama es admin',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%') = 9
+  (37, 'Permisos', 'Las 10 funciones de administración comprueban en el servidor que quien llama es admin',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%') = 10
     and (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and p.proname = 'require_admin' and p.prosrc like '%public.is_admin()%') = 1,
-    (select count(*)::text || ' de 9 funciones protegidas' from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%')),
+    (select count(*)::text || ' de 10 funciones protegidas' from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.prosrc like '%private.require_admin()%')),
+  (38, 'Permisos', 'Solicitudes de plan: el navegador solo puede LEER las suyas; se crean, cancelan y resuelven con funciones del servidor',
+    (select relrowsecurity from pg_class where oid = 'public.plan_requests'::regclass)
+      and has_table_privilege('authenticated', 'public.plan_requests', 'select')
+      and not has_any_column_privilege('authenticated', 'public.plan_requests', 'insert,update')
+      and not has_table_privilege('authenticated', 'public.plan_requests', 'delete')
+      and not has_any_column_privilege('anon', 'public.plan_requests', 'select,insert,update'), null),
+  (39, 'Permisos', 'Solicitudes de plan: solo una pendiente por persona y toda solicitud resuelta tiene fecha (lo garantiza la base de datos)',
+    exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'plan_requests' and indexname = 'plan_requests_one_pending' and indexdef like 'CREATE UNIQUE INDEX%')
+      and exists (select 1 from pg_constraint where conrelid = 'public.plan_requests'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%resolved_at IS NULL%'), null),
 
   -- ---------------- Columnas protegidas (nadie se otorga poderes desde el navegador) ----------------
   (40, 'Columnas protegidas', 'Un usuario NO puede cambiar su tipo de cuenta ni su suspensión',

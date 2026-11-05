@@ -597,6 +597,38 @@ begin
       v_n := v_n + 1;
     end if;
   end loop;
+
+  -- Vencimiento del plan (Etapa 9): cualquier tipo de cuenta. Avisa una vez cuando faltan 7 días o menos y una vez cuando venció
+  -- (hasta 30 días después, y solo si no tiene ya otro plan vigente).
+  perform private.expire_user_subscriptions(v_uid);
+  if coalesce(v_prefs ->> 'suscripcion', 'true') <> 'false' then
+    for r in
+      select s.id, s.ends_at, pl.name
+        from public.subscriptions s join public.subscription_plans pl on pl.id = s.plan_id
+       where s.user_id = v_uid and s.status in ('active', 'expired') and s.ends_at is not null
+         and s.ends_at > now() - interval '30 days' and s.ends_at <= now() + interval '7 days'
+         and (s.ends_at > now() or not exists (
+               select 1 from public.subscriptions x
+                where x.user_id = v_uid and x.status = 'active' and x.starts_at <= now() and (x.ends_at is null or x.ends_at > now())))
+       order by s.ends_at desc limit 1
+    loop
+      v_key := 'plan-' || r.id::text || '-' || to_char(r.ends_at at time zone 'America/Mexico_City', 'YYYYMMDD')
+               || case when r.ends_at <= now() then '-vencido' else '-por-vencer' end;
+      if r.ends_at <= now() then
+        v_title := r.name || ' venció';
+        v_body := 'Venció el ' || private.fecha_es(r.ends_at) || '. Puedes solicitar la renovación en Suscripciones; no genera ningún cargo.';
+      else
+        v_title := r.name || ' vence pronto';
+        v_body := 'Vigente hasta el ' || private.fecha_es(r.ends_at) || '. Puedes solicitar la renovación en Suscripciones; no genera ningún cargo.';
+      end if;
+      insert into private.reminder_log (user_id, dedupe_key) values (v_uid, v_key) on conflict do nothing;
+      get diagnostics v_rows = row_count;
+      if v_rows = 1 then
+        perform private.notify(v_uid, 'suscripcion', v_title, v_body, 'planes.html');
+        v_n := v_n + 1;
+      end if;
+    end loop;
+  end if;
   return v_n;
 end;
 $$;
@@ -1147,16 +1179,26 @@ begin
 end;
 $$;
 
-create or replace function public.admin_assign_subscription(
+-- Texto de una fecha para avisos: «4 dic 2026» (hora de México).
+create or replace function private.fecha_es(p_ts timestamptz)
+returns text language sql stable set search_path = ''
+as $$
+  select extract(day from p_ts at time zone 'America/Mexico_City')::int::text || ' '
+      || (array['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'])[extract(month from p_ts at time zone 'America/Mexico_City')::int]
+      || ' ' || extract(year from p_ts at time zone 'America/Mexico_City')::int::text;
+$$;
+
+-- Asigna un plan (reemplaza el vigente). La usan la función de administración y la resolución de solicitudes.
+-- p_actor es quien lo hace (null si se ejecuta desde el SQL Editor).
+create or replace function private.assign_subscription(
   p_user uuid, p_plan text, p_period text default 'monthly',
-  p_starts timestamptz default null, p_ends timestamptz default null, p_note text default null)
+  p_starts timestamptz default null, p_ends timestamptz default null, p_note text default null, p_actor uuid default null)
 returns uuid language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   v_plan public.subscription_plans; v_old public.subscriptions; v_new_id uuid;
   v_start timestamptz := coalesce(p_starts, now()); v_end timestamptz;
 begin
-  perform private.require_admin();
   if p_period not in ('monthly', 'yearly') then
     raise exception 'Periodo no válido.' using errcode = '22023';
   end if;
@@ -1173,15 +1215,27 @@ begin
     update public.subscriptions set status = 'replaced' where id = v_old.id;
   end if;
   insert into public.subscriptions (user_id, plan_id, billing_period, starts_at, ends_at, assigned_by, note)
-  values (p_user, p_plan, p_period, v_start, v_end, (select auth.uid()), left(p_note, 500))
+  values (p_user, p_plan, p_period, v_start, v_end, p_actor, left(p_note, 500))
   returning id into v_new_id;
   insert into public.subscription_events (subscription_id, user_id, event, from_plan, to_plan, actor_id, details)
   values (v_new_id, p_user, case when v_old.id is null then 'assigned' else 'changed' end,
-          v_old.plan_id, p_plan, (select auth.uid()), jsonb_build_object('period', p_period, 'ends_at', v_end));
+          v_old.plan_id, p_plan, p_actor, jsonb_build_object('period', p_period, 'ends_at', v_end));
   perform private.audit('subscription_assign', 'subscriptions', v_new_id::text,
                         jsonb_build_object('user', p_user, 'plan', p_plan, 'period', p_period));
-  perform private.notify(p_user, 'suscripcion', 'Tu suscripción cambió', 'Ahora tienes ' || v_plan.name || '.', 'planes.html');
+  perform private.notify(p_user, 'suscripcion', 'Tu suscripción cambió',
+    'Ahora tienes ' || v_plan.name || case when v_end is not null then '. Vigente hasta el ' || private.fecha_es(v_end) else '' end || '.', 'planes.html');
   return v_new_id;
+end;
+$$;
+
+create or replace function public.admin_assign_subscription(
+  p_user uuid, p_plan text, p_period text default 'monthly',
+  p_starts timestamptz default null, p_ends timestamptz default null, p_note text default null)
+returns uuid language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  return private.assign_subscription(p_user, p_plan, p_period, p_starts, p_ends, p_note, (select auth.uid()));
 end;
 $$;
 
@@ -1202,27 +1256,42 @@ begin
 end;
 $$;
 
--- Renovación manual: extiende el vencimiento un periodo más.
-create or replace function public.admin_renew_subscription(p_subscription uuid, p_note text default null)
+-- Renovación manual: extiende el vencimiento un periodo más (p_period null = el mismo periodo de la suscripción).
+create or replace function private.renew_subscription(
+  p_subscription uuid, p_note text default null, p_actor uuid default null, p_period text default null)
 returns timestamptz language plpgsql volatile security definer set search_path = ''
 as $$
-declare v_sub public.subscriptions; v_new_end timestamptz;
+declare v_sub public.subscriptions; v_new_end timestamptz; v_period text; v_name text;
 begin
-  perform private.require_admin();
   select * into v_sub from public.subscriptions where id = p_subscription for update;
   if not found or v_sub.status not in ('active', 'expired') then
     raise exception 'Solo se pueden renovar suscripciones activas o vencidas.' using errcode = 'P0001';
   end if;
+  v_period := coalesce(p_period, v_sub.billing_period);
+  if v_period not in ('monthly', 'yearly') then
+    raise exception 'Periodo no válido.' using errcode = '22023';
+  end if;
   v_new_end := greatest(now(), coalesce(v_sub.ends_at, now()))
-               + case v_sub.billing_period when 'yearly' then interval '1 year' else interval '1 month' end;
-  update public.subscriptions set ends_at = v_new_end, status = 'active', note = coalesce(left(p_note, 500), note)
+               + case v_period when 'yearly' then interval '1 year' else interval '1 month' end;
+  update public.subscriptions set ends_at = v_new_end, status = 'active', billing_period = v_period, note = coalesce(left(p_note, 500), note)
    where id = p_subscription;
   insert into public.subscription_events (subscription_id, user_id, event, from_plan, to_plan, actor_id, details)
-  values (p_subscription, v_sub.user_id, 'renewed', v_sub.plan_id, v_sub.plan_id, (select auth.uid()),
+  values (p_subscription, v_sub.user_id, 'renewed', v_sub.plan_id, v_sub.plan_id, p_actor,
           jsonb_build_object('ends_at', v_new_end));
   perform private.audit('subscription_renew', 'subscriptions', p_subscription::text, jsonb_build_object('ends_at', v_new_end));
-  perform private.notify(v_sub.user_id, 'suscripcion', 'Tu suscripción fue renovada', null, 'planes.html');
+  select name into v_name from public.subscription_plans where id = v_sub.plan_id;
+  perform private.notify(v_sub.user_id, 'suscripcion', 'Tu suscripción fue renovada',
+    coalesce(v_name, 'Tu plan') || ': vigente hasta el ' || private.fecha_es(v_new_end) || '.', 'planes.html');
   return v_new_end;
+end;
+$$;
+
+create or replace function public.admin_renew_subscription(p_subscription uuid, p_note text default null)
+returns timestamptz language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  return private.renew_subscription(p_subscription, p_note, (select auth.uid()), null);
 end;
 $$;
 
@@ -1243,7 +1312,162 @@ begin
 end;
 $$;
 
--- Marca como vencidas las suscripciones cuya fecha ya pasó (se programará en la Etapa 9).
+-- =====================================================================
+-- SOLICITUDES DE PLAN (Etapa 9) · sin pagos
+-- La persona pide un plan; un administrador la aprueba o la rechaza. Aprobar NO cobra nada:
+-- asigna el plan manualmente (con vigencia de un mes o un año según el periodo pedido).
+-- =====================================================================
+create or replace function private.plan_request_code(p_id uuid)
+returns text language sql immutable set search_path = ''
+as $$ select upper(left(replace(p_id::text, '-', ''), 8)); $$;
+
+create or replace function public.request_plan(p_plan text, p_period text default 'monthly', p_note text default null)
+returns uuid language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_prof public.profiles; v_plan public.subscription_plans; v_cur public.subscriptions;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+  v_id uuid; v_aud text;
+begin
+  if v_uid is null then raise exception 'Inicia sesión para solicitar un plan.' using errcode = '42501'; end if;
+  select * into v_prof from public.profiles where id = v_uid;
+  if not found then raise exception 'Inicia sesión para solicitar un plan.' using errcode = '42501'; end if;
+  if v_prof.is_suspended then
+    raise exception 'Tu cuenta está suspendida y no puede solicitar planes.' using errcode = 'P0001';
+  end if;
+  if p_period is null or p_period not in ('monthly', 'yearly') then
+    raise exception 'Periodo no válido.' using errcode = '22023';
+  end if;
+  if v_note is not null and char_length(v_note) > 300 then
+    raise exception 'El mensaje puede tener hasta 300 caracteres.' using errcode = '22023';
+  end if;
+  select * into v_plan from public.subscription_plans where id = p_plan and is_active;
+  if not found then raise exception 'Ese plan no existe o no está disponible.' using errcode = 'P0002'; end if;
+  v_aud := case when v_prof.account_type = 'business' then 'business' else 'owner' end;
+  if v_plan.audience <> v_aud then
+    raise exception 'Ese plan no corresponde a tu tipo de cuenta.' using errcode = 'P0001';
+  end if;
+  if v_plan.price_monthly_mxn = 0 then
+    raise exception 'Huellita Básica es gratuita: no necesitas solicitarla. Si tienes una suscripción y quieres dejarla, cancélala desde Suscripciones.' using errcode = 'P0001';
+  end if;
+  select * into v_cur from public.subscriptions s
+   where s.user_id = v_uid and s.status = 'active' and s.starts_at <= now() and (s.ends_at is null or s.ends_at > now())
+   order by s.starts_at desc limit 1;
+  if found and v_cur.plan_id = p_plan and (v_cur.ends_at is null or v_cur.ends_at > now() + interval '15 days') then
+    raise exception 'Ya tienes ese plan vigente. Podrás pedir la renovación cuando falten 15 días o menos para que venza.' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.plan_requests r where r.user_id = v_uid and r.status = 'pending') then
+    raise exception 'Ya tienes una solicitud pendiente. Espera la respuesta del equipo o cancélala para hacer otra.' using errcode = 'P0001';
+  end if;
+  perform private.rate_limit('plan_req_d', v_uid::text, 'day', 5);
+  begin
+    insert into public.plan_requests (user_id, plan_id, billing_period, user_note)
+    values (v_uid, p_plan, p_period, v_note)
+    returning id into v_id;
+  exception when unique_violation then
+    raise exception 'Ya tienes una solicitud pendiente. Espera la respuesta del equipo o cancélala para hacer otra.' using errcode = 'P0001';
+  end;
+  -- Conserva solo las 20 solicitudes más recientes de cada persona (cuida el espacio del plan gratuito).
+  delete from public.plan_requests r
+   where r.user_id = v_uid and r.status <> 'pending'
+     and r.id in (select x.id from public.plan_requests x where x.user_id = v_uid order by x.created_at desc, x.id desc offset 20);
+  perform private.notify(v_uid, 'suscripcion', 'Recibimos tu solicitud: ' || v_plan.name,
+    'No genera ningún cargo ni pide datos de pago. El equipo la revisará y te avisaremos aquí.', 'planes.html', 'planreq-' || v_id::text);
+  perform private.notify_admins('aviso', 'Nueva solicitud de plan',
+    v_plan.name || ' · ' || case p_period when 'yearly' then 'anual' else 'mensual' end
+      || ' · cuenta de ' || case when v_prof.account_type = 'business' then 'aliado' else 'dueño de mascota' end
+      || ' · código ' || private.plan_request_code(v_id),
+    'admin.html', 'planreq-admin-' || v_id::text);
+  return v_id;
+end;
+$$;
+
+create or replace function public.cancel_plan_request(p_request uuid)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_uid uuid := (select auth.uid()); v_n integer;
+begin
+  if v_uid is null then raise exception 'No autorizado.' using errcode = '42501'; end if;
+  update public.plan_requests r set status = 'cancelled', resolved_at = now()
+   where r.id = p_request and r.user_id = v_uid and r.status = 'pending';
+  get diagnostics v_n = row_count;
+  if v_n = 0 then
+    raise exception 'No encontramos una solicitud pendiente tuya con ese identificador.' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- Aprueba o rechaza una solicitud. Interna: se llama desde el SQL Editor (el equipo) o desde la función de administración.
+-- Aprobar asigna el plan (o renueva, si pide el mismo plan que ya tiene); rechazar avisa a la persona con la nota del equipo.
+create or replace function private.resolve_plan_request(
+  p_request uuid, p_approve boolean, p_note text default null, p_actor uuid default null, p_ends timestamptz default null)
+returns uuid language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_req public.plan_requests; v_plan public.subscription_plans; v_cur public.subscriptions; v_sub uuid;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+begin
+  if p_approve is null then raise exception 'Indica si se aprueba o se rechaza.' using errcode = '22023'; end if;
+  select * into v_req from public.plan_requests where id = p_request for update;
+  if not found then raise exception 'Solicitud no encontrada.' using errcode = 'P0002'; end if;
+  if v_req.status <> 'pending' then raise exception 'Esa solicitud ya fue resuelta.' using errcode = 'P0001'; end if;
+  select * into v_plan from public.subscription_plans where id = v_req.plan_id;
+  if p_approve then
+    select * into v_cur from public.subscriptions s
+     where s.user_id = v_req.user_id and s.status = 'active' and s.starts_at <= now() and (s.ends_at is null or s.ends_at > now())
+     order by s.starts_at desc limit 1;
+    if found and v_cur.plan_id = v_req.plan_id and v_cur.ends_at is not null and p_ends is null then
+      perform private.renew_subscription(v_cur.id, 'Solicitud ' || private.plan_request_code(p_request), p_actor, v_req.billing_period);
+      v_sub := v_cur.id;
+    else
+      v_sub := private.assign_subscription(v_req.user_id, v_req.plan_id, v_req.billing_period, null, p_ends,
+                 'Solicitud ' || private.plan_request_code(p_request) || coalesce(' · ' || left(v_note, 300), ''), p_actor);
+    end if;
+  else
+    perform private.notify(v_req.user_id, 'suscripcion', 'Tu solicitud de ' || v_plan.name || ' no fue aprobada',
+      coalesce(left(v_note, 300), 'Si tienes dudas, escríbenos desde Atención al cliente.'), 'planes.html', 'planreq-res-' || p_request::text);
+  end if;
+  update public.plan_requests
+     set status = case when p_approve then 'approved' else 'rejected' end,
+         admin_note = left(v_note, 500), resolved_by = p_actor, resolved_at = now()
+   where id = p_request;
+  perform private.audit(case when p_approve then 'plan_request_approve' else 'plan_request_reject' end,
+                        'plan_requests', p_request::text,
+                        jsonb_build_object('user', v_req.user_id, 'plan', v_req.plan_id, 'actor', p_actor));
+  return v_sub;
+end;
+$$;
+
+create or replace function public.admin_resolve_plan_request(
+  p_request uuid, p_approve boolean, p_note text default null, p_ends timestamptz default null)
+returns uuid language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  return private.resolve_plan_request(p_request, p_approve, p_note, (select auth.uid()), p_ends);
+end;
+$$;
+
+-- Marca como vencidas las suscripciones de UNA persona cuya fecha ya pasó. Se llama al generar sus recordatorios
+-- (no hay tareas programadas): el plan ya deja de dar beneficios por la fecha, esto solo ordena el historial.
+create or replace function private.expire_user_subscriptions(p_user uuid)
+returns integer language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_n integer;
+begin
+  with e as (
+    update public.subscriptions s set status = 'expired'
+     where s.user_id = p_user and s.status = 'active' and s.ends_at is not null and s.ends_at <= now()
+    returning s.id, s.user_id, s.plan_id)
+  insert into public.subscription_events (subscription_id, user_id, event, from_plan)
+  select id, user_id, 'expired', plan_id from e;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+-- Marca como vencidas las suscripciones cuya fecha ya pasó, de todas las personas (para el SQL Editor; no se programa).
 create or replace function private.expire_subscriptions()
 returns integer language plpgsql volatile security definer set search_path = ''
 as $$

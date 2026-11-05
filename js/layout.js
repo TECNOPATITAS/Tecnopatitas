@@ -24,7 +24,7 @@ function guest(){acts.innerHTML=actsGuest;document.querySelectorAll('[data-only]
 /* ---- Campana de notificaciones (Etapa 8) ----
    · Consulta cuántas notificaciones sin leer hay: una vez al abrir la página, cada 60 s mientras la pestaña esté visible y al volver a ella.
      Usa consultas normales y NO una conexión en vivo: así cada pestaña abierta no gasta una de las ~200 conexiones simultáneas del plan gratuito.
-   · Una vez al día por navegador (hora de México) pide al servidor que genere los recordatorios de vacunas, desparasitaciones y citas;
+   · Una vez al día por navegador (hora de México) pide al servidor que genere los recordatorios de vacunas, desparasitaciones y citas y los avisos de vencimiento de tu plan (también para cuentas de aliado);
      no hay ningún proceso programado, por eso se hace al visitar la página. La pantalla de Notificaciones lo hace por su cuenta.
    · El número solo es comodidad: lo que cada persona puede leer lo decide RLS en el servidor. */
 const BELL_MS=60000,REM_KEY='tp-rem-v1:';
@@ -52,7 +52,7 @@ function stopBell(){
   paintBell(0);
 }
 async function dailyReminders(m){
-  if(remTried||m.accountType!=='owner'||k==='notificaciones')return;   // la pantalla de Notificaciones los pide por su cuenta
+  if(remTried||k==='notificaciones')return;   // la pantalla de Notificaciones los pide por su cuenta
   remTried=true;
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const key=REM_KEY+m.user.id;

@@ -1,0 +1,3 @@
+Plantilla de Supabase (Authentication > Emails > Templates)  |  Asunto (Subject)
+Confirm sign up       (confirmar-registro.html)       |  Confirma tu cuenta en TECNOPATITAS
+Reset password        (recuperar-contrasena.html)     |  Restablece tu contraseña de TECNOPATITAS

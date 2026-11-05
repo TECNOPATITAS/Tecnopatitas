@@ -750,11 +750,11 @@ def g12(br):
     settle(pg, 700)
     check('12.7 Un recordatorio borrado NO vuelve a aparecer al reabrir; tampoco se duplican los demás', len(nitems(pg)) == 2 and not any(t.startswith('Vacuna vencida') for t in titles(pg)), titles(pg))
     ctx.close()
-    # cuenta de aliado: no pide recordatorios
+    # cuenta de aliado: también pide la generación (avisos de vencimiento del plan)
     reset_state(); n0 = len(be.n_log)
     ctx, pg, log = open_page(br, 'cris@ejemplo.mx'); all_logs.append(log)
     settle(pg, 500)
-    check('12.8 Una cuenta de aliado no pide recordatorios (no tiene mascotas)', not rest_calls('generate_my_reminders', None, n0), rest_calls('generate_my_reminders', None, n0))
+    check('12.8 Una cuenta de aliado también pide la generación (una vez): sirve para sus avisos de vencimiento del plan', len(rest_calls('generate_my_reminders', 'POST', n0)) == 1, rest_calls('generate_my_reminders', None, n0))
     ctx.close()
     # fallo del servidor al generar: la lista funciona igual y sin mensajes
     reset_state(); seed_pet_reminders(ELI, 'Pelusa'); be.notify(ELI, 'aviso', 'Ya había una')
@@ -778,7 +778,7 @@ def g12(br):
     n0 = len(be.n_log)
     ctx, pg, log = open_page(br, 'cris@ejemplo.mx', page='perfil.html', wait=False); all_logs.append(log)
     pg.wait_for_selector('#bell:not([hidden])'); settle(pg, 700)
-    check('12.15 La cabecera de una cuenta de aliado no pide recordatorios', not rest_calls('generate_my_reminders', None, n0), rest_calls('generate_my_reminders', None, n0))
+    check('12.15 La cabecera de una cuenta de aliado pide la generación una sola vez al día', len(rest_calls('generate_my_reminders', 'POST', n0)) == 1, rest_calls('generate_my_reminders', None, n0))
     check('12.16 Sin errores de consola ni CSP', not csp_problems(log), csp_problems(log))
     ctx.close()
 

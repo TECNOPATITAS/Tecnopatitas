@@ -18,5 +18,5 @@
 window.TP_CONFIG = Object.freeze({
   SUPABASE_URL: 'https://mtkbxnhsjqqdbrjeaslo.supabase.co',
   SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_HqVlBYz_UizUGTe1iVu7tw_9GWv7-jm',
-  TURNSTILE_SITE_KEY: '0x4AAAAAAF0HtqWbA1_WsqN4'          // ← pega aquí tu «Site Key» de Cloudflare Turnstile (empieza con 0x4…). Vacío = sin anti-robots y sin denuncias.
+  TURNSTILE_SITE_KEY: ''          // ← pega aquí tu «Site Key» de Cloudflare Turnstile (empieza con 0x4…). Vacío = sin anti-robots y sin denuncias.
 });

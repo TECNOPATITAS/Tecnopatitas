@@ -186,7 +186,7 @@ const DEFS = [
 function planNote() {
   const lim = P.healthLimit(plan), name = plan ? plan.name : 'Huellita Básica';
   const box = $('c-plan');
-  box.textContent = lim === 0 ? 'Tu plan (' + name + ') no incluye el carnet de salud digital: se incluye desde Huellita Pro (2 mascotas) y Huellita VIP (ilimitado). Los planes de pago aún no se contratan en línea; por ahora los asigna un administrador.'
+  box.textContent = lim === 0 ? 'Tu plan (' + name + ') no incluye el carnet de salud digital: se incluye desde Huellita Pro (2 mascotas) y Huellita VIP (ilimitado). Todavía no hay pagos en línea: puedes pedir un plan en Mi suscripción y el equipo lo activa a mano, sin cargos.'
     : lim === Infinity ? 'Tu plan (' + name + ') incluye carnet de salud para todas tus mascotas.'
     : 'Tu plan (' + name + ') permite carnet de salud para ' + lim + ' mascota' + (lim === 1 ? '' : 's') + '. Si ya llegaste al límite, el servidor te lo avisará al agregar un registro.';
 }

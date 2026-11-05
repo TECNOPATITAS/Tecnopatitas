@@ -39,7 +39,7 @@ Para ver el directorio y las guías con contenido de ejemplo, ejecuta igual **`0
 ## Paso 5 · Verificar que quedó seguro
 
 1. **New query**, pega el contenido de **`verificar_seguridad.sql`** y pulsa **Run**.
-2. La primera fila debe decir: **`TODO CORRECTO: 35 comprobaciones superadas`**.
+2. La primera fila debe decir: **`TODO CORRECTO: 37 comprobaciones superadas`**.
 3. Las filas **INFO** son solo datos (número de administradores, demos…). Cualquier fila **REVISAR** significa que algo no coincide: copia la tabla completa y envíamela. Ese resultado **no contiene contraseñas, claves ni datos de usuarios**, así que es seguro compartirlo.
 
 Revisión visual opcional:
@@ -94,7 +94,7 @@ Solo dos datos, ambos **públicos por diseño** (la seguridad la dan las políti
 
 ## Para desarrolladores: ejecutar las pruebas en tu computadora (opcional)
 
-Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 511 pruebas de seguridad y funcionamiento:
+Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 603 pruebas de seguridad y funcionamiento:
 
 ```bash
 bash database/pruebas/ejecutar_pruebas.sh
