@@ -34,6 +34,7 @@ begin
 end $$;
 alter table private.settings    enable row level security;
 alter table private.rate_limits enable row level security;
+alter table private.reminder_log enable row level security;
 
 -- Atajo para recrear políticas sin errores al volver a ejecutar el script.
 create or replace function pg_temp.pol(p_table text, p_name text, p_sql text)
@@ -289,6 +290,7 @@ grant execute on function public.regenerate_pet_qr_token(uuid) to authenticated;
 grant execute on function public.storage_has_room(text, integer) to authenticated;
 grant execute on function public.has_qr_plan() to authenticated;
 grant execute on function public.start_conversation(text, text) to authenticated;
+grant execute on function public.generate_my_reminders() to authenticated;
 
 -- Administración (cada función vuelve a comprobar is_admin() en el servidor).
 grant execute on function public.admin_dashboard_stats() to authenticated;

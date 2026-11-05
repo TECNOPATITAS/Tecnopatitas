@@ -366,3 +366,11 @@ create table if not exists private.rate_limits (
   hits          integer not null default 0,
   primary key (bucket, key, window_start)
 );
+
+-- Recordatorios ya generados (Etapa 8): así un recordatorio que la persona borra no vuelve a aparecer.
+create table if not exists private.reminder_log (
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  dedupe_key  text not null check (char_length(dedupe_key) <= 120),
+  created_at  timestamptz not null default now(),
+  primary key (user_id, dedupe_key)
+);

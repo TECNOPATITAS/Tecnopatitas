@@ -885,14 +885,14 @@ def g14(br):
     scr, sess = session_script('ana@ejemplo.mx')
     ctx = new_ctx(br); ctx.add_init_script(scr); pg = ctx.new_page(); log = []; all_logs.append(log)
     pg.on('console', lambda m: log.append(m.text) if m.type in ('error', 'warning') else None); pg.on('pageerror', lambda e: log.append('PAGEERROR ' + str(e)))
-    pg.goto(f'{ORIGIN}/notificaciones.html'); pg.wait_for_selector('body.tp-ok')
+    pg.goto(f'{ORIGIN}/perfil.html'); pg.wait_for_selector('body.tp-ok')
     f = pg.locator('form[data-stage]')
     if f.count():
         pg.evaluate("document.querySelector('form[data-stage]').requestSubmit()"); settle(pg, 200)
         check('14.2 Las secciones que aún no se conectan (notificaciones, Etapa 8) conservan su aviso honesto', pg.evaluate("document.getElementById('toast').classList.contains('on')") and 'Etapa 8' in pg.inner_text('#toast'), pg.inner_text('#toast'))
     else:
         check('14.2 (notificaciones.html ya no tiene formulario pendiente)', True)
-    check('14.3 Las páginas sin chat no abren conexión en vivo', len(rt.attempts) == n_rt, len(rt.attempts) - n_rt)
+    check('14.3 Las páginas que no son el chat ni Notificaciones (aquí, Perfil) no abren conexión en vivo', len(rt.attempts) == n_rt, len(rt.attempts) - n_rt)
     ctx.close()
 
 with sync_playwright() as pw:

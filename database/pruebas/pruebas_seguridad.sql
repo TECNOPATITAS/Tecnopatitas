@@ -751,7 +751,152 @@ select t.ex('Cuenta suspendida NO puede subir fotos', '{B}', 'authenticated', $q
 update public.profiles set is_suspended = false where id = '{B}';
 
 -- =====================================================================
-select t.grupo('10 Invariantes globales de seguridad');
+select t.grupo('10 Notificaciones, recordatorios y avisos al equipo (Etapa 8)');
+-- =====================================================================
+select (now() at time zone 'America/Mexico_City')::date as hoy \gset
+insert into auth.users (id, email, raw_user_meta_data) values
+ ('{G}', 'gus@prueba.mx',  '{"display_name":"Gus"}'),
+ ('{H}', 'hana@prueba.mx', '{"display_name":"Hana"}'),
+ ('{I}', 'ines@prueba.mx', '{"display_name":"Ines"}');
+insert into public.admin_roles (user_id, note) values ('{I}', 'segunda admin de pruebas');
+insert into public.pets (id, owner_id, name, species) values ('{P4}', '{G}', 'Nube', 'perro'), ('{P5}', '{G}', 'Trueno', 'gato'), ('{P6}', '{H}', 'Rocky', 'perro');
+insert into public.pet_vaccinations (pet_id, vaccine_name, applied_on, next_due_on) values
+ ('{P4}', 'Rabia',         :'hoy'::date - 360, :'hoy'::date + 3),     -- próxima
+ ('{P4}', 'Parvovirus',    :'hoy'::date - 400, :'hoy'::date - 20),    -- vencida
+ ('{P4}', 'Moquillo',      :'hoy'::date - 380, :'hoy'::date - 10),    -- registro viejo, ya renovado: NO debe avisar
+ ('{P4}', 'Moquillo',      :'hoy'::date - 5,   :'hoy'::date + 360),
+ ('{P4}', 'Triple felina', :'hoy'::date - 335, :'hoy'::date + 30),    -- falta mucho
+ ('{P4}', 'Leptospirosis', :'hoy'::date - 600, :'hoy'::date - 100),   -- vencida hace más de 60 días: no se avisa
+ ('{P6}', 'Rabia',         :'hoy'::date - 360, :'hoy'::date + 2);     -- de otra persona (H)
+insert into public.pet_deworming (pet_id, product_name, kind, applied_on, next_due_on) values
+ ('{P4}', 'Drontal',  'interna', :'hoy'::date - 170, :'hoy'::date - 85),   -- viejo, ya renovado
+ ('{P4}', 'Drontal',  'interna', :'hoy'::date - 80,  :'hoy'::date + 1),    -- próxima
+ ('{P5}', 'Bravecto', 'externa', :'hoy'::date - 100, :'hoy'::date - 30);   -- vencida
+insert into public.pet_appointments (pet_id, kind, scheduled_at, status, clinic) values
+ ('{P4}', 'vacunacion', now() + interval '20 hours', 'programada', 'Clínica Patitas'),
+ ('{P4}', 'consulta',   now() + interval '5 days',   'programada', null),
+ ('{P4}', 'consulta',   now() + interval '10 hours', 'cancelada',  null),
+ ('{P4}', 'consulta',   now() - interval '3 hours',  'programada', null);
+
+-- ---- Recordatorios ----
+select t.ex('Un anónimo NO puede generar recordatorios', null, 'anon', $q$select public.generate_my_reminders()$q$, 'ERR 42501%');
+select t.eq('G genera sus recordatorios: 2 vacunas, 2 desparasitaciones y 1 cita', '{G}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '5');
+select t.eq('Quedan guardados por tipo', '{G}', 'authenticated',
+  $q$select string_agg(type || ':' || c, ',' order by type) from (select type, count(*) c from public.notifications group by type) x$q$, 'cita:1,desparasitacion:2,vacuna:2');
+select t.eq('Vacuna próxima: título con la vacuna y la mascota', '{G}', 'authenticated', $q$select title from public.notifications where title like 'Vacuna próxima%'$q$, 'Vacuna próxima: Rabia (Nube)');
+select t.eq('Vacuna vencida: título', '{G}', 'authenticated', $q$select title from public.notifications where title like 'Vacuna vencida%'$q$, 'Vacuna vencida: Parvovirus (Nube)');
+select t.eq('Vacuna vencida: el texto dice «Debió aplicarse el …»', '{G}', 'authenticated', $q$select body from public.notifications where title like 'Vacuna vencida%'$q$, 'Debió aplicarse el % 20__. Consulta a tu veterinario%');
+select t.eq('Desparasitación próxima usa el ÚLTIMO registro de la mascota (el viejo ya renovado no cuenta)', '{G}', 'authenticated', $q$select string_agg(title, ' | ' order by title) from public.notifications where type = 'desparasitacion'$q$, 'Desparasitación próxima: Drontal (Nube) | Desparasitación vencida: Bravecto (Trueno)');
+select t.eq('Un registro viejo ya renovado (Moquillo), una fecha lejana y una vencida hace más de 60 días NO generan avisos', '{G}', 'authenticated',
+  $q$select count(*) from public.notifications where title like '%Moquillo%' or title like '%Triple%' or title like '%Leptospirosis%'$q$, '0');
+select t.eq('Cita próxima: solo la programada dentro de 48 horas (no la lejana, la cancelada ni la pasada)', '{G}', 'authenticated',
+  $q$select count(*) from public.notifications where type = 'cita'$q$, '1');
+select t.eq('Cita próxima: texto con tipo, fecha, hora de México y clínica', '{G}', 'authenticated',
+  $q$select body from public.notifications where type = 'cita'$q$, 'Cita de vacunación: % (hora de México) · Clínica Patitas.');
+select t.eq('Todos los recordatorios llevan al carnet', '{G}', 'authenticated', $q$select count(*) from public.notifications where link is distinct from 'carnet.html'$q$, '0');
+select t.eq('Llamarla otra vez no duplica nada', '{G}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '0');
+select t.ex('G borra el recordatorio de Parvovirus', '{G}', 'authenticated', $q$delete from public.notifications where title like 'Vacuna vencida%'$q$, 'OK rows=1');
+select t.eq('Un recordatorio borrado NO vuelve a aparecer', '{G}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '0');
+select t.eq('...y sigue borrado', '{G}', 'authenticated', $q$select count(*) from public.notifications where title like 'Vacuna vencida%'$q$, '0');
+select t.eq('H solo recibe lo de SUS mascotas (Rocky)', '{H}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '1');
+select t.eq('El recordatorio de H es el de su mascota', '{H}', 'authenticated', $q$select title from public.notifications$q$, 'Vacuna próxima: Rabia (Rocky)');
+select t.eq('G no ve las notificaciones de H', '{G}', 'authenticated', $q$select count(*) from public.notifications where user_id = '{H}'$q$, '0');
+select t.ex('G NO puede leer el registro interno de recordatorios', '{G}', 'authenticated', $q$select * from private.reminder_log$q$, 'ERR 42501%');
+select t.ex('G NO puede llamar a las funciones internas de avisos al equipo', '{G}', 'authenticated', $q$select private.notify_admins('aviso', 'x')$q$, 'ERR 42501%');
+-- preferencias: si se apaga el tipo, no se registra (y al reactivarlo sí aparece)
+update public.profiles set notification_prefs = notification_prefs || '{"vacuna": false}' where id = '{G}';
+insert into public.pet_vaccinations (pet_id, vaccine_name, applied_on, next_due_on) values ('{P5}', 'Bordetella', :'hoy'::date - 300, :'hoy'::date + 1);
+select t.eq('Con «vacunas» apagado no se genera el recordatorio', '{G}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '0');
+update public.profiles set notification_prefs = notification_prefs || '{"vacuna": true}' where id = '{G}';
+select t.eq('Al reactivar «vacunas» aparece el que estaba pendiente', '{G}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '1');
+select t.eq('...y es el de Bordetella', '{G}', 'authenticated', $q$select count(*) from public.notifications where title = 'Vacuna próxima: Bordetella (Trueno)'$q$, '1');
+-- límite por hora
+insert into private.rate_limits (bucket, key, window_start, hits) values ('reminders_h', '{G}', date_trunc('hour', now()), 30)
+  on conflict (bucket, key, window_start) do update set hits = 30;
+select t.ex('Más de 30 llamadas en una hora se frenan', '{G}', 'authenticated', $q$select public.generate_my_reminders()$q$, 'ERR P0001: Demasiadas solicitudes%');
+delete from private.rate_limits where bucket = 'reminders_h';
+-- el registro anti-repetición se limpia: lo de hace más de 180 días se borra, lo reciente se conserva (y solo el de quien llama)
+insert into private.reminder_log (user_id, dedupe_key, created_at) values
+  ('{G}', 'viejo-prueba', now() - interval '200 days'),
+  ('{G}', 'reciente-prueba', now() - interval '5 days'),
+  ('{H}', 'viejo-de-otra-persona', now() - interval '200 days');
+select t.eq('G llama a generar recordatorios', '{G}', 'authenticated', $q$select public.generate_my_reminders()::text$q$, '%');
+select t.ok('El registro de hace más de 180 días se borra al generar recordatorios',
+  not exists (select 1 from private.reminder_log where dedupe_key = 'viejo-prueba'),
+  (select count(*)::text from private.reminder_log where dedupe_key = 'viejo-prueba'));
+select t.ok('...el reciente se conserva', exists (select 1 from private.reminder_log where dedupe_key = 'reciente-prueba'));
+select t.ok('...y no toca el registro de otra persona', exists (select 1 from private.reminder_log where dedupe_key = 'viejo-de-otra-persona'));
+delete from private.reminder_log where dedupe_key in ('reciente-prueba', 'viejo-de-otra-persona');
+
+-- ---- notify: avisos que no se silencian, duplicados y limpieza automática ----
+update public.profiles set notification_prefs = notification_prefs || '{"aviso": false, "mensaje": false}' where id = '{H}';
+select private.notify('{H}', 'aviso', 'Aviso importante');
+select private.notify('{H}', 'mensaje', 'Mensaje silenciado');
+select t.eq('Los avisos NO se pueden silenciar', '{H}', 'authenticated', $q$select count(*) from public.notifications where title = 'Aviso importante'$q$, '1');
+select t.eq('Los demás tipos sí (mensajes apagados no llegan)', '{H}', 'authenticated', $q$select count(*) from public.notifications where title = 'Mensaje silenciado'$q$, '0');
+select private.notify('{H}', 'aviso', 'Con clave', null, null, 'k1');
+select private.notify('{H}', 'aviso', 'Con clave', null, null, 'k1');
+select t.eq('La misma clave de duplicado no repite el aviso', '{H}', 'authenticated', $q$select count(*) from public.notifications where title = 'Con clave'$q$, '1');
+delete from public.notifications where user_id = '{H}';
+insert into public.notifications (user_id, type, title, created_at)
+  select '{H}', 'aviso', 'n' || g, now() - (g || ' minutes')::interval from generate_series(1, 205) g;
+select private.notify('{H}', 'aviso', 'Disparador de limpieza');
+select t.eq('Cada persona conserva como máximo 200 notificaciones', '{H}', 'authenticated', $q$select count(*) from public.notifications$q$, '200');
+select t.eq('Se borran las más antiguas y se conservan las recientes', '{H}', 'authenticated',
+  $q$select (count(*) filter (where title in ('n199', 'n1', 'Disparador de limpieza')) = 3 and count(*) filter (where title in ('n200', 'n205')) = 0)::text from public.notifications$q$, 'true');
+insert into public.notifications (user_id, type, title, is_read, created_at) values
+ ('{G}', 'aviso', 'vieja leída',     true,  now() - interval '100 days'),
+ ('{G}', 'aviso', 'vieja sin leer',  false, now() - interval '100 days'),
+ ('{G}', 'aviso', 'muy vieja',       false, now() - interval '400 days');
+select private.notify('{G}', 'aviso', 'Otro aviso');
+select t.eq('Limpieza: las leídas de más de 90 días y todas las de más de un año se borran; las sin leer recientes se conservan', null, 'service_role',
+  $q$select string_agg(title, ',' order by title) from public.notifications where user_id = '{G}' and title in ('vieja leída', 'vieja sin leer', 'muy vieja')$q$, 'vieja sin leer');
+
+-- ---- Avisos al equipo: denuncias ----
+update public.profiles set notification_prefs = notification_prefs || '{"aviso": false}' where id = '{I}';
+delete from private.rate_limits;
+select count(*) as d_antes from public.notifications where user_id = '{D}' and title = 'Nueva denuncia recibida' \gset
+select t.ex('Llega una denuncia', null, 'service_role', $q$select public.submit_complaint('abandono', 'SECRETO-DESCRIPCION ' || repeat('Un perro abandonado. ', 3), current_date, 'Zacatecas', 'Fresnillo')$q$, 'OK rows=1');
+select t.eq('Todas las cuentas de administración reciben el aviso (D)', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{D}' and title = 'Nueva denuncia recibida'$q$, (:d_antes + 1)::text);
+select t.eq('...también la que tiene los «avisos» apagados (I): los avisos no se silencian', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{I}' and title = 'Nueva denuncia recibida' and body like '%Zacatecas%'$q$, '1');
+select t.eq('Quien no es administrador NO recibe nada', null, 'service_role',
+  $q$select count(*) from public.notifications where title = 'Nueva denuncia recibida' and user_id not in (select user_id from public.admin_roles)$q$, '0');
+select t.eq('El aviso solo lleva código, tipo y estado, no la descripción', null, 'service_role',
+  $q$select count(*) from public.notifications where body like '%SECRETO%'$q$, '0');
+select t.eq('El aviso lleva al panel y es de tipo «aviso»', null, 'service_role',
+  $q$select (link = 'admin.html' and type = 'aviso' and body like 'Código TP-____-____ · abandono · Zacatecas')::text from public.notifications where user_id = '{I}' and title = 'Nueva denuncia recibida' and body like '%Zacatecas%'$q$, 'true');
+
+-- ---- Avisos al equipo: chat (una vez por «turno») ----
+update public.profiles set notification_prefs = notification_prefs || '{"aviso": true}' where id = '{I}';
+select t.ex('G abre una conversación', '{G}', 'authenticated', $q$select public.start_conversation('Consulta de Gus', 'Hola, necesito ayuda')$q$, 'OK rows=1');
+select t.eq('El equipo recibe UN aviso por la conversación nueva (D)', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{D}' and title = 'Atención al cliente: conversación esperando respuesta' and body = 'Consulta de Gus'$q$, '1');
+select t.eq('...y la otra administradora (I)', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{I}' and body = 'Consulta de Gus'$q$, '1');
+select t.eq('El aviso es de tipo «mensaje» y lleva al panel', null, 'service_role',
+  $q$select (type = 'mensaje' and link = 'admin.html')::text from public.notifications where user_id = '{D}' and body = 'Consulta de Gus'$q$, 'true');
+select t.ex('G escribe otro mensaje seguido', '{G}', 'authenticated', $q$insert into public.messages (conversation_id, body) values ((select id from public.conversations where subject = 'Consulta de Gus'), 'Sigo aquí')$q$, 'OK rows=1');
+select t.eq('Mensajes seguidos del mismo turno NO repiten el aviso', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{D}' and body = 'Consulta de Gus'$q$, '1');
+select t.ex('D responde', '{D}', 'authenticated', $q$insert into public.messages (conversation_id, body) values ((select id from public.conversations where subject = 'Consulta de Gus'), 'Con gusto')$q$, 'OK rows=1');
+select t.eq('La respuesta del equipo NO genera avisos al equipo', null, 'service_role',
+  $q$select count(*) from public.notifications where body = 'Consulta de Gus'$q$, '2');
+select t.eq('...y sí avisa a G', null, 'service_role',
+  $q$select count(*) from public.notifications where user_id = '{G}' and title = 'Nueva respuesta de atención al cliente'$q$, '1');
+select t.ex('G responde tras la respuesta del equipo (turno nuevo)', '{G}', 'authenticated', $q$insert into public.messages (conversation_id, body) values ((select id from public.conversations where subject = 'Consulta de Gus'), 'Gracias, otra duda')$q$, 'OK rows=1');
+select t.eq('Turno nuevo: nuevo aviso al equipo (D y I)', null, 'service_role',
+  $q$select count(*) from public.notifications where body = 'Consulta de Gus'$q$, '4');
+update public.profiles set notification_prefs = notification_prefs || '{"mensaje": false}' where id = '{I}';
+select t.ex('D responde otra vez', '{D}', 'authenticated', $q$insert into public.messages (conversation_id, body) values ((select id from public.conversations where subject = 'Consulta de Gus'), 'Listo')$q$, 'OK rows=1');
+select t.ex('G escribe de nuevo', '{G}', 'authenticated', $q$insert into public.messages (conversation_id, body) values ((select id from public.conversations where subject = 'Consulta de Gus'), 'Perfecto')$q$, 'OK rows=1');
+select t.eq('Quien apagó los avisos de mensajes (I) ya no recibe estos; D sí', null, 'service_role',
+  $q$select string_agg(user_id::text || ':' || c, ',' order by user_id) from (select user_id, count(*) c from public.notifications where body = 'Consulta de Gus' group by user_id) x$q$,
+  '{I}:2,{D}:3');
+
+-- =====================================================================
+select t.grupo('11 Invariantes globales de seguridad');
 -- =====================================================================
 select t.ok('TODAS las tablas de public y private tienen RLS activado',
   not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace

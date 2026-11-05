@@ -126,6 +126,12 @@ class Backend:
                 if not u: return ok(None)
                 return ok(dict(plan=None if u['email'].startswith('sinplan') or self.profiles[u['id']]['account_type'] == 'business'
                                else dict(id='basica', name='Huellita Básica', tagline='Plan Comunidad'), subscription=None))
+            if path == '/rest/v1/notifications' and method == 'GET':        # Etapa 8: la campana de la cabecera cuenta las no leídas (aquí: ninguna)
+                if 'authorization' in h and not u: return err(401, 'PGRST301', 'JWT expired')
+                return ok([]) if u else err(401, 'PGRST301', 'JWT required')
+            if path == '/rest/v1/rpc/generate_my_reminders' and method == 'POST':
+                if 'authorization' in h and not u: return err(401, 'PGRST301', 'JWT expired')
+                return ok(0) if u else err(401, 'PGRST301', 'JWT required')
             if path == '/rest/v1/profiles':
                 if 'authorization' in h and not u: return err(401, 'PGRST301', 'JWT expired')
                 if not u: return ok([])

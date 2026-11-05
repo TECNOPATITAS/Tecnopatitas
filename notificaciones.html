@@ -1,3 +1,47 @@
 <!DOCTYPE html>
 <html lang="es-MX"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notificaciones · TECNOPATITAS</title><meta name="description" content="Notificaciones"><meta name="robots" content="noindex"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"></head>
-<body data-page="notificaciones" data-guard="any"><a class="skip" href="#main">Saltar al contenido</a><div id="site-header"></div><main id="main"><div class="app"><nav class="side" aria-label="Sección"><a href="perfil.html">👤 Perfil</a><a data-only="owner" hidden href="mascota.html">🐕 Mis mascotas</a><a data-only="owner" hidden href="carnet.html">🩺 Carnet digital</a><a href="notificaciones.html" aria-current="page">🔔 Notificaciones</a><a href="chat.html">💬 Atención al cliente</a><a href="planes.html">⭐ Mi suscripción</a><a data-only="business" hidden href="panel-aliado.html">🏪 Panel de aliado</a><a data-only="admin" hidden href="admin.html">🛠️ Administración</a></nav><div><h1 style="font-size:2rem">Notificaciones</h1><p class="stage"><b>Sesión verificada en la Etapa 3. Esta sección se conecta en la Etapa 8.</b> Centro de notificaciones conectado a la base de datos; los correos dependerán de Resend (100 al día en el plan gratuito).</p><div class="empty"><span>🔔</span><h3>No tienes notificaciones</h3><p>Aquí verás vacunas, desparasitaciones, citas, promociones, cambios de suscripción, mensajes y avisos.</p></div><div class="card" style="margin-top:20px"><h3>Preferencias</h3><form data-stage="8"><label class="ck"><input type="checkbox" checked> Vacunas próximas</label><label class="ck"><input type="checkbox" checked> Desparasitación</label><label class="ck"><input type="checkbox" checked> Citas veterinarias</label><label class="ck"><input type="checkbox" checked> Promociones</label><label class="ck"><input type="checkbox" checked> Cambios en suscripciones</label><label class="ck"><input type="checkbox" checked> Mensajes nuevos</label><label class="ck"><input type="checkbox" checked> Avisos administrativos</label><br><button class="btn sm">Guardar preferencias</button></form></div></div></div></main><div id="site-footer"></div><div id="toast" role="status" aria-live="polite"></div><script src="js/config.js"></script><script src="js/tp-client.js"></script><script src="js/tp-ui.js"></script><script src="js/layout.js"></script><script src="js/guard.js"></script></body></html>
+<body data-page="notificaciones" data-guard="any"><a class="skip" href="#main">Saltar al contenido</a><div id="site-header"></div><main id="main"><div class="app"><nav class="side" aria-label="Sección"><a href="perfil.html">👤 Perfil</a><a data-only="owner" hidden href="mascota.html">🐕 Mis mascotas</a><a data-only="owner" hidden href="carnet.html">🩺 Carnet digital</a><a href="notificaciones.html" aria-current="page">🔔 Notificaciones</a><a href="chat.html">💬 Atención al cliente</a><a href="planes.html">⭐ Mi suscripción</a><a data-only="business" hidden href="panel-aliado.html">🏪 Panel de aliado</a><a data-only="admin" hidden href="admin.html">🛠️ Administración</a></nav><div>
+<h1 style="font-size:2rem">Notificaciones</h1>
+<p class="mut" id="nt-intro">Aquí aparecen los recordatorios de vacunas, desparasitaciones y citas de tus mascotas, las respuestas de atención al cliente y los avisos de TECNOPATITAS. Todo se queda dentro de la plataforma: por ahora <b>no enviamos correos</b>.</p>
+<div id="nt-msg" class="msg" hidden></div>
+<p class="sr-only" id="nt-announce" role="status" aria-live="polite"></p>
+
+<section class="card nt-card" aria-labelledby="nt-h">
+<div class="nt-head">
+<h2 id="nt-h" style="margin:0;font-size:1.25rem">Tus notificaciones</h2>
+<div class="nt-filters" role="group" aria-label="Filtrar notificaciones">
+<button class="btn sm" type="button" id="nt-f-all" aria-pressed="true">Todas</button>
+<button class="btn sm" type="button" id="nt-f-unread" aria-pressed="false">Sin leer</button>
+</div>
+</div>
+<p class="mut nt-count" id="nt-count"></p>
+<p class="mut chat-live" id="nt-live" role="status"></p>
+<div class="nt-tools">
+<button class="btn ghost sm" type="button" id="nt-readall" disabled>Marcar todas como leídas</button>
+<button class="btn ghost sm" type="button" id="nt-delread" disabled>Borrar las leídas</button>
+</div>
+<p class="mut" id="nt-loading" role="status">Cargando…</p>
+<div class="empty" id="nt-empty" hidden><span aria-hidden="true">🔔</span><h3 id="nt-empty-h">No tienes notificaciones</h3><p id="nt-empty-p">Aquí verás los recordatorios de vacunas, desparasitaciones y citas, las respuestas de atención al cliente y los avisos importantes.</p></div>
+<ul class="nt-ul" id="nt-list" aria-label="Lista de notificaciones"></ul>
+<div class="chat-more" id="nt-more-wrap" hidden><button class="btn ghost sm" type="button" id="nt-more">Mostrar más</button></div>
+</section>
+
+<section class="card nt-card" style="margin-top:20px" aria-labelledby="nt-h-pref">
+<h2 id="nt-h-pref" style="margin:0;font-size:1.25rem">Preferencias</h2>
+<div id="p-msg" class="msg" hidden></div>
+<form id="f-prefs" novalidate>
+<fieldset class="nt-fs" id="p-set" disabled><legend>Qué quieres recibir aquí</legend>
+<label class="ck"><input type="checkbox" name="vacuna"> Vacunas próximas o vencidas</label>
+<label class="ck"><input type="checkbox" name="desparasitacion"> Desparasitación</label>
+<label class="ck"><input type="checkbox" name="cita"> Citas veterinarias</label>
+<label class="ck"><input type="checkbox" name="promocion"> Promociones</label>
+<label class="ck"><input type="checkbox" name="suscripcion"> Cambios en tu suscripción</label>
+<label class="ck"><input type="checkbox" name="mensaje"> Respuestas de atención al cliente</label>
+<label class="ck"><input type="checkbox" checked disabled> Avisos importantes de TECNOPATITAS <small>(siempre activos)</small></label>
+</fieldset>
+<p class="mut"><small>Los avisos importantes (por ejemplo, sobre tu cuenta o tu seguridad) no se pueden apagar. Las promociones y los cambios de suscripción todavía no se envían: tu preferencia ya se guarda para cuando estén disponibles.</small></p>
+<label class="ck"><input type="checkbox" id="p-email" disabled> Recibir recordatorios por correo <small>(todavía no disponible: por ahora no se envía ningún correo)</small></label>
+<button class="btn coral sm" type="submit" id="p-save" disabled>Guardar preferencias</button>
+</form>
+</section>
+</div></div></main><div id="site-footer"></div><div id="toast" role="status" aria-live="polite"></div><script src="js/config.js"></script><script src="js/tp-client.js"></script><script src="js/tp-ui.js"></script><script src="js/layout.js"></script><script src="js/guard.js"></script><script src="js/tp-realtime.js"></script><script src="js/pages/notificaciones.js"></script></body></html>

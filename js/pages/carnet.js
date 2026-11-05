@@ -1,7 +1,7 @@
 /*
   Carnet digital (Etapa 4): vacunas, desparasitación y citas/consultas por mascota.
   Los límites del plan (cuántas mascotas con carnet) los aplica el SERVIDOR; aquí solo se muestran avisos claros.
-  Los recordatorios automáticos se activan en la Etapa 9: por ahora solo se guardan las fechas.
+  Los recordatorios de próximas fechas y citas aparecen en Notificaciones (Etapa 8, dentro de la plataforma; todavía no por correo ni WhatsApp).
 */
 (() => {
 'use strict';

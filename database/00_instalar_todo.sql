@@ -370,6 +370,14 @@ create table if not exists private.rate_limits (
   primary key (bucket, key, window_start)
 );
 
+-- Recordatorios ya generados (Etapa 8): así un recordatorio que la persona borra no vuelve a aparecer.
+create table if not exists private.reminder_log (
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  dedupe_key  text not null check (char_length(dedupe_key) <= 120),
+  created_at  timestamptz not null default now(),
+  primary key (user_id, dedupe_key)
+);
+
 -- >>>>>>>>>> 02_funciones.sql
 -- =====================================================================
 -- TECNOPATITAS · Etapa 2 · 02 · FUNCIONES Y DISPARADORES
@@ -461,14 +469,36 @@ create or replace function private.notify(
   p_link text default null, p_dedupe text default null)
 returns void language plpgsql security definer set search_path = ''
 as $$
-declare v_prefs jsonb;
+declare v_prefs jsonb; v_n integer;
 begin
   select notification_prefs into v_prefs from public.profiles where id = p_user;
   if not found then return; end if;
-  if coalesce(v_prefs ->> p_type, 'true') = 'false' then return; end if;
+  -- Los avisos (suspensión, estado del negocio, denuncias para el equipo) no se pueden silenciar; los demás tipos, sí.
+  if p_type <> 'aviso' and coalesce(v_prefs ->> p_type, 'true') = 'false' then return; end if;
   insert into public.notifications (user_id, type, title, body, link, dedupe_key)
   values (p_user, p_type, left(p_title, 120), left(p_body, 500), p_link, p_dedupe)
   on conflict (user_id, dedupe_key) where dedupe_key is not null do nothing;
+  get diagnostics v_n = row_count;
+  if v_n = 0 then return; end if;
+  -- Limpieza automática (cuida el espacio del plan gratuito; no hace falta un proceso programado):
+  -- las leídas se borran a los 90 días, todas a los 365 días y cada persona conserva como máximo las 200 más recientes.
+  delete from public.notifications n
+   where n.user_id = p_user and ((n.is_read and n.created_at < now() - interval '90 days') or n.created_at < now() - interval '365 days');
+  delete from public.notifications n
+   where n.id in (select x.id from public.notifications x where x.user_id = p_user order by x.created_at desc, x.id desc offset 200);
+end;
+$$;
+
+-- Avisa a todas las cuentas de administración (el equipo). Solo se usa desde funciones del servidor.
+create or replace function private.notify_admins(
+  p_type text, p_title text, p_body text default null, p_link text default null, p_dedupe text default null)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare r record;
+begin
+  for r in select a.user_id from public.admin_roles a loop
+    perform private.notify(r.user_id, p_type, p_title, p_body, p_link, p_dedupe);
+  end loop;
 end;
 $$;
 
@@ -827,17 +857,36 @@ $$;
 create or replace function private.after_message()
 returns trigger language plpgsql security definer set search_path = ''
 as $$
-declare v_owner uuid;
+declare v_owner uuid; v_subject text; v_prev text;
 begin
+  -- Rol del mensaje anterior de la conversación (null si es el primero): sirve para avisar al equipo una sola vez por «turno».
+  select m.sender_role into v_prev from public.messages m
+   where m.conversation_id = new.conversation_id and m.id <> new.id
+   order by m.created_at desc, m.id desc limit 1;
   update public.conversations c
      set last_message_at = new.created_at,
          last_sender = new.sender_role,
          status = case when new.sender_role = 'staff' then 'abierta' else c.status end
    where c.id = new.conversation_id
-  returning c.user_id into v_owner;
+  returning c.user_id, c.subject into v_owner, v_subject;
   if new.sender_role = 'staff' then
     perform private.notify(v_owner, 'mensaje', 'Nueva respuesta de atención al cliente', left(new.body, 140), 'chat.html');
+  elsif v_prev is null or v_prev = 'staff' then
+    perform private.notify_admins('mensaje', 'Atención al cliente: conversación esperando respuesta',
+                                  left(v_subject, 120), 'admin.html', 'chat-' || new.id::text);
   end if;
+  return new;
+end;
+$$;
+
+-- Avisa al equipo cuando llega una denuncia. El aviso solo lleva el código, el tipo y el estado: la denuncia no tiene ningún dato de quien reporta.
+create or replace function private.complaint_after_insert()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  perform private.notify_admins('aviso', 'Nueva denuncia recibida',
+                                'Código ' || new.tracking_code || ' · ' || replace(new.type, '_', ' ') || ' · ' || btrim(new.state),
+                                'admin.html', 'denuncia-' || new.id::text);
   return new;
 end;
 $$;
@@ -861,6 +910,75 @@ begin
   insert into public.conversations (subject) values (v_subject) returning id into v_id;
   insert into public.messages (conversation_id, body) values (v_id, v_body);
   return v_id;
+end;
+$$;
+
+-- Recordatorios dentro de la plataforma (Etapa 8): vacunas y desparasitaciones por vencer o vencidas, y citas próximas.
+-- No hay un proceso programado: la página llama a esta función una vez al día al abrirse (y al entrar a Notificaciones).
+-- Solo mira las mascotas de quien la llama. Para cada «próxima fecha» usa el ÚLTIMO registro de esa vacuna (o el último
+-- de desparasitación de la mascota), así un registro viejo ya renovado no genera avisos falsos.
+-- private.reminder_log recuerda lo ya generado: si la persona borra un recordatorio, no vuelve a aparecer.
+create or replace function public.generate_my_reminders()
+returns integer language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_prefs jsonb; v_today date := private.today_mx(); v_n integer := 0; v_rows integer;
+  r record; v_key text; v_title text; v_body text;
+  v_months constant text[] := array['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+begin
+  if v_uid is null then
+    raise exception 'Inicia sesión para ver tus recordatorios.' using errcode = 'P0001';
+  end if;
+  select p.notification_prefs into v_prefs from public.profiles p where p.id = v_uid;
+  if not found then return 0; end if;
+  perform private.rate_limit('reminders_h', v_uid::text, 'hour', 30);
+  delete from private.reminder_log l where l.user_id = v_uid and l.created_at < now() - interval '180 days';
+
+  for r in
+    select * from (
+      select 'vacuna'::text as typ, 'vac-' || x.id::text as ref, x.pet_name, x.vaccine_name as what, x.next_due_on as due, null::timestamptz as at, null::text as kind, null::text as clinic
+        from (select v.id, v.next_due_on, v.vaccine_name, p.name as pet_name,
+                     row_number() over (partition by v.pet_id, lower(btrim(v.vaccine_name)) order by v.applied_on desc, v.created_at desc, v.id desc) as rn
+                from public.pet_vaccinations v join public.pets p on p.id = v.pet_id where p.owner_id = v_uid) x
+       where x.rn = 1 and x.next_due_on is not null and x.next_due_on between v_today - 60 and v_today + 7
+      union all
+      select 'desparasitacion', 'dew-' || x.id::text, x.pet_name, x.product_name, x.next_due_on, null, null, null
+        from (select d.id, d.next_due_on, d.product_name, p.name as pet_name,
+                     row_number() over (partition by d.pet_id order by d.applied_on desc, d.created_at desc, d.id desc) as rn
+                from public.pet_deworming d join public.pets p on p.id = d.pet_id where p.owner_id = v_uid) x
+       where x.rn = 1 and x.next_due_on is not null and x.next_due_on between v_today - 60 and v_today + 7
+      union all
+      select 'cita', 'cita-' || a.id::text, p.name, null, null, a.scheduled_at, a.kind, a.clinic
+        from public.pet_appointments a join public.pets p on p.id = a.pet_id
+       where p.owner_id = v_uid and a.status = 'programada' and a.scheduled_at >= now() and a.scheduled_at < now() + interval '48 hours'
+    ) q
+    order by coalesce(q.due::timestamptz, q.at) limit 30
+  loop
+    if coalesce(v_prefs ->> r.typ, 'true') = 'false' then continue; end if;   -- si la persona apagó ese tipo, no se registra (al reactivarlo sí aparecerán)
+    if r.typ = 'cita' then
+      v_key := r.ref || '-' || extract(epoch from r.at)::bigint::text;
+      v_title := 'Cita próxima de ' || r.pet_name;
+      v_body := 'Cita de ' || case r.kind when 'vacunacion' then 'vacunación' when 'desparasitacion' then 'desparasitación' when 'estetica' then 'estética' when 'otra' then 'tu mascota' else 'consulta' end
+             || ': ' || extract(day from r.at at time zone 'America/Mexico_City')::int::text || ' ' || v_months[extract(month from r.at at time zone 'America/Mexico_City')::int] || ' '
+             || extract(year from r.at at time zone 'America/Mexico_City')::int::text || ', ' || to_char(r.at at time zone 'America/Mexico_City', 'HH24:MI') || ' (hora de México)'
+             || case when r.clinic is not null then ' · ' || r.clinic else '' end || '.';
+    else
+      v_key := r.ref || '-' || r.due::text || case when r.due < v_today then '-vencida' else '-proxima' end;
+      v_title := case r.typ when 'vacuna' then 'Vacuna ' else 'Desparasitación ' end
+              || case when r.due < v_today then 'vencida: ' else 'próxima: ' end || r.what || ' (' || r.pet_name || ')';
+      v_body := case when r.due < v_today then 'Debió aplicarse el ' when r.due = v_today then 'Vence hoy: ' else 'Fecha recomendada: ' end
+             || extract(day from r.due)::int::text || ' ' || v_months[extract(month from r.due)::int] || ' ' || extract(year from r.due)::int::text
+             || '. Consulta a tu veterinario y actualiza el carnet cuando la apliques.';
+    end if;
+    insert into private.reminder_log (user_id, dedupe_key) values (v_uid, v_key) on conflict do nothing;
+    get diagnostics v_rows = row_count;
+    if v_rows = 1 then
+      perform private.notify(v_uid, r.typ, v_title, v_body, 'carnet.html');
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  return v_n;
 end;
 $$;
 
@@ -996,6 +1114,8 @@ create trigger tp_write before insert or update on public.care_guides for each r
 
 drop trigger if exists tp_before on public.complaints;
 create trigger tp_before before update on public.complaints for each row execute function private.complaint_before_update();
+drop trigger if exists tp_notify on public.complaints;
+create trigger tp_notify after insert on public.complaints for each row execute function private.complaint_after_insert();
 drop trigger if exists tp_audit on public.complaints;
 create trigger tp_audit after update on public.complaints for each row execute function private.complaint_audit();
 
@@ -1558,6 +1678,7 @@ begin
 end $$;
 alter table private.settings    enable row level security;
 alter table private.rate_limits enable row level security;
+alter table private.reminder_log enable row level security;
 
 -- Atajo para recrear políticas sin errores al volver a ejecutar el script.
 create or replace function pg_temp.pol(p_table text, p_name text, p_sql text)
@@ -1813,6 +1934,7 @@ grant execute on function public.regenerate_pet_qr_token(uuid) to authenticated;
 grant execute on function public.storage_has_room(text, integer) to authenticated;
 grant execute on function public.has_qr_plan() to authenticated;
 grant execute on function public.start_conversation(text, text) to authenticated;
+grant execute on function public.generate_my_reminders() to authenticated;
 
 -- Administración (cada función vuelve a comprobar is_admin() en el servidor).
 grant execute on function public.admin_dashboard_stats() to authenticated;

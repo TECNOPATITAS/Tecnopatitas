@@ -2,29 +2,30 @@
 
 Plataforma para el cuidado, protección y bienestar de las mascotas. Se construye **por etapas**; este archivo dice qué está terminado y qué no.
 
-## Estado actual: Etapa 7 de 11 (chat de atención al cliente)
+## Estado actual: Etapa 8 de 11 (notificaciones)
 
 | Etapa | Contenido | Estado |
 |---|---|---|
 | 1 | Estructura, diseño y navegación | Terminada |
-| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4, 5, 6 y 7 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 35 comprobaciones |
+| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4, 5, 6, 7 y 8 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 35 comprobaciones |
 | 3 | Registro, inicio de sesión, recuperar contraseña, sesión, roles y protección de páginas | Terminada y probada en tu sitio real |
 | 4 | Mascotas, carnet de salud digital, subida de fotos (Supabase Storage) y placa QR (Huellita VIP) | Terminada y probada en tu sitio real |
 | 5 | Directorio público y panel de aliados: alta del negocio, datos, logotipo y fotos, horarios, promociones, estadísticas y enlaces a Google Maps | Terminada y probada por ti |
 | 6 | Denuncias anónimas con código de seguimiento, fotos de evidencia por una función segura y anti-robots con Cloudflare Turnstile (también en registro, inicio de sesión y recuperar) | Escrita y probada contra simuladores. Faltan tus pasos manuales y pruebas en tu sitio real: `GUIA_ETAPA_6.md` |
-| **7** | **Chat de atención al cliente: conversaciones entre una persona y el equipo, mensajes en vivo (Supabase Realtime) con respaldo por consulta, límites diarios por cuenta y cuenta suspendida solo lectura** | **Escrita y probada contra simuladores (171 pruebas de navegador del chat + 457 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_7.md`** |
-| 8–11 | Notificaciones, planes, panel admin, publicación | Pendientes |
+| 7 | Chat de atención al cliente: conversaciones entre una persona y el equipo, mensajes en vivo (Supabase Realtime) con respaldo por consulta, límites diarios por cuenta y cuenta suspendida solo lectura | Escrita y probada contra simuladores (171 pruebas de navegador del chat + 457 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_7.md` |
+| **8** | **Notificaciones: pantalla con lista, filtros y preferencias, campanita con el número de no leídas, recordatorios de vacunas, desparasitaciones y citas, y avisos al equipo (denuncias y chat). Solo dentro de la plataforma: todavía no se envían correos ni WhatsApp** | **Escrita y probada contra simuladores (194 pruebas de navegador + 511 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_8.md`** |
+| 9–11 | Planes, panel admin, publicación | Pendientes |
 
 **Terminado en la Etapa 2** (carpeta `database/`)
 
-- 19 tablas en `public` + 2 internas en `private`, con claves, índices y restricciones (CHECK) que impiden datos incoherentes.
+- 19 tablas en `public` + 3 internas en `private`, con claves, índices y restricciones (CHECK) que impiden datos incoherentes.
 - Seguridad por filas (RLS) en **todas** las tablas; permisos por columna (nadie puede cambiar su rol, su suspensión, su plan o el dueño de una mascota desde el navegador); funciones del servidor para todo lo sensible.
 - Los 5 planes (nombres, precios MXN y beneficios exactos) y los permisos de cada plan **aplicados en el servidor**, no solo en pantalla.
 - Tablas y funciones para denuncias anónimas **sin ningún dato que identifique a quien reporta**, con código de seguimiento, trampa anti-robots y límite de envíos (conectadas a la página en la Etapa 6).
 - Chat, notificaciones, guías, directorio con filtros, placa QR con token aleatorio, bitácora de acciones de administración.
 - 6 buckets de archivos (solo JPG/PNG/WebP, con tope de tamaño y de cantidad por persona). El sexto, `qr-photos`, se añadió en la Etapa 4.
 - Datos de demostración **opcionales y claramente falsos** (`06_datos_demo.sql`).
-- 457 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5 y 420 hasta la Etapa 6) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
+- 511 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5, 420 hasta la Etapa 6 y 457 hasta la Etapa 7) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
 
 **Cómo se probó la Etapa 2, con honestidad**
 
@@ -102,7 +103,7 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 - **Límites por cuenta** para cuidar el plan gratuito: 20 mensajes cada 10 minutos y **100 cada 24 horas**, 10 conversaciones abiertas y 20 nuevas por día. El equipo no tiene límite. Los avisos salen en español.
 - **Mensajes en vivo** con Supabase Realtime mediante un cliente propio y mínimo (`js/tp-realtime.js`, sin librerías de terceros): reconexión con esperas crecientes, latidos para detectar conexiones muertas, renovación del token, pausa si la pestaña lleva más de 5 minutos oculta (para no gastar el límite de conexiones gratuito) y **respaldo por consulta cada 15 segundos** si el modo en vivo no está disponible; la página siempre dice cuál de los dos modos está usando.
 - La marca **«Nuevo»** (respuesta sin leer) vive solo en tu navegador. Todo lo que viene del servidor se muestra como **texto**. Teléfono: una columna a la vez, botones de al menos 44 px.
-- Cuando el equipo responde se **guarda** una notificación (se mostrará en la Etapa 8). Hasta la Etapa 10 el equipo responde con SQL (consultas en `GUIA_ETAPA_7.md`).
+- Cuando el equipo responde se **guarda** una notificación (desde la Etapa 8 se ve en Notificaciones y en la campanita). Hasta la Etapa 10 el equipo responde con SQL (consultas en `GUIA_ETAPA_7.md`).
 
 **Cómo se probó la Etapa 7, con honestidad**
 
@@ -112,16 +113,33 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 - Siguen pasando las regresiones de las Etapas 3 a 6: 106 + 133 + 172 + 140 pruebas de navegador, 76 de la función segura y los códigos QR.
 - **Lo que NO se pudo probar desde aquí:** el **Realtime real** de tu Supabase (el cliente sigue el protocolo documentado y se probó contra el simulador; si algún detalle difiere, solo se sabrá en tu sitio, y para eso está el respaldo por consulta y la lista de pruebas de `GUIA_ETAPA_7.md`), el comportamiento exacto de PostgREST ante estas consultas (simulado fielmente) y un teléfono físico. Un detalle técnico: los eventos de Realtime incluyen el identificador (UUID) de quien escribió, también el del administrador; es solo un número sin nombre ni correo, y la página no lo usa.
 
-**Límite importante del plan gratuito de Supabase:** su servicio de correo de cortesía solo envía a los correos de tu equipo y a un máximo de 2 por hora. Para que cualquier persona pueda registrarse hará falta un SMTP propio. **Sin dominio** (decisión actual) no sirven Resend ni Brevo; la opción gratuita viable es una cuenta de Gmail exclusiva del proyecto con contraseña de aplicación (Paso 4 de `GUIA_ETAPA_3.md`). Los correos de notificación de la Etapa 9 se replantearán con ese límite.
+**Terminado en la Etapa 8** (guía: `GUIA_ETAPA_8.md`)
+
+- **Notificaciones** (`notificaciones.html`): lista de 50 en 50 con «Mostrar más», filtro «Sin leer», marcar como leída o no leída, «Marcar todas», borrar una o «Borrar las leídas» (con confirmación), y un botón «Ver» que abre la página relacionada y la marca como leída. Tipos: vacuna, desparasitación, cita, mensaje, promoción, suscripción y aviso. Cada persona puede apagar los tipos que no quiera, **menos «aviso»** (cuenta y seguridad).
+- **Las crea el servidor, nunca el navegador.** La persona solo puede leer las suyas, marcarlas y borrarlas (RLS y permisos por columna): no puede crear notificaciones, cambiar su texto, pasárselas a otra persona ni tocar las ajenas. Los enlaces «Ver» solo se aceptan si apuntan a una página conocida de este sitio; todo lo que viene del servidor se muestra como texto.
+- **Campanita** en la cabecera (solo con sesión): número de no leídas hasta «99+». **No usa conexión en vivo**: consulta al abrir cada página, cada 60 segundos con la pestaña visible, al volver a ella y cada vez que marcas o borras algo, para que cada pestaña abierta no gaste una de las ~200 conexiones simultáneas del plan gratuito. La pantalla de Notificaciones sí usa Realtime (solo las filas de tu cuenta) con **respaldo por consulta cada 20 s** y lo dice en pantalla.
+- **Recordatorios de salud sin tareas programadas:** cuando una persona abre el sitio (una vez al día por navegador) o abre Notificaciones, el servidor revisa **solo sus mascotas**: vacunas y desparasitaciones con próxima fecha en los siguientes 7 días o vencidas hace menos de 60 días (se usa el último registro de cada una, así un registro viejo ya renovado no da avisos falsos) y citas programadas en las próximas 48 horas. Cada hecho avisa **una sola vez**; si lo borras no vuelve. Tope de 30 por llamada y 30 llamadas por hora.
+- **Avisos al equipo:** cada denuncia nueva avisa a todas las cuentas de administración con el **código, el tipo y el estado** (nunca la descripción, fotos ni datos de quien denuncia), y un mensaje del chat que espera respuesta avisa **una vez por turno**. Cuando el equipo responde, la persona recibe un aviso con un adelanto de hasta 140 caracteres de la respuesta.
+- **Tope por persona:** 200 notificaciones; al crear una nueva se limpian las más antiguas que sobren, las leídas de más de 90 días y cualquiera de más de 365.
+
+**Cómo se probó la Etapa 8, con honestidad**
+
+- **511 pruebas de SQL** (54 nuevas: privacidad entre cuentas, columnas que el navegador no puede tocar, tipos y preferencias, tope y limpieza, recordatorios sin duplicados ni avisos falsos, límites por hora, avisos al equipo sin datos de quien denuncia, adelanto del chat) y **35 comprobaciones** del verificador. **22 sabotajes** al SQL (por ejemplo, dejar que el navegador cree notificaciones, avisar dos veces el mismo hecho, incluir la descripción de la denuncia en el aviso): **los 22 se detectan**.
+- **194 pruebas de navegador** en Chromium con **las mismas cabeceras CSP del sitio** (`pruebas-web/probar_notificaciones.py`, 17 grupos, contra el simulador `mock_etapa8.py`, que traduce cada petición a SQL real con las políticas RLS): lista y privacidad entre dos cuentas, marcar y borrar con doble clic y errores del servidor, filtros y paginación, texto hostil y enlaces peligrosos, la campanita, tiempo real con un **servidor Realtime simulado** y reloj virtual (repetidos, eventos de otra persona o mal formados, reconexión, pestaña oculta), teléfono de 390 px, cuentas de aliado y de administración, y una **comprobación automática de contraste** de la paleta.
+- **79 «sabotajes»** al código de la página, la campanita y el CSS: **73 se detectaron a la primera**. Los 6 restantes eran huecos de mis pruebas (una fecha mal formateada que pasaba por coincidir con otra fecha, un evento en vivo repetido, un tipo de notificación desconocido, el globo del número despegado de la campana, la campana visible un instante para un invitado y consultas simultáneas de la campana); ya los cubrí y ahora **se detectan los 79**.
+- Siguen pasando las regresiones de las Etapas 3 a 7 (106 + 133 + 172 + 140 + 171 pruebas de navegador, 76 de la función segura y los códigos QR). Una prueba del chat que usaba Notificaciones como página «sin conexión en vivo» se cambió a Perfil, porque ahora esa pantalla sí abre conexión en vivo.
+- **Lo que NO se pudo probar desde aquí:** el **Realtime real** y el **PostgREST real** de tu Supabase (el cliente sigue el protocolo documentado y se probó contra simuladores; por eso existe el respaldo por consulta y la lista de pruebas de `GUIA_ETAPA_8.md`) y un teléfono físico (se revisó a 390 px). Un detalle técnico: los eventos de Realtime incluyen el identificador (UUID) de la dueña de la notificación; es solo un número sin nombre ni correo.
+
+**Límite importante del plan gratuito de Supabase:** su servicio de correo de cortesía solo envía a los correos de tu equipo y a un máximo de 2 por hora. Para que cualquier persona pueda registrarse hará falta un SMTP propio. **Sin dominio** (decisión actual) no sirven Resend ni Brevo; la opción gratuita viable es una cuenta de Gmail exclusiva del proyecto con contraseña de aplicación (Paso 4 de `GUIA_ETAPA_3.md`). Los **correos** de notificación (todavía no existen: la Etapa 8 avisa solo dentro de la plataforma) se replantearán con ese límite; no hace falta decidirlo para avanzar a la Etapa 9.
 
 **No terminado (y no finge estarlo)**
 
-- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados, denuncias anónimas y chat de atención. **Todavía no:** notificaciones y el panel de administración (siguen mostrando «se conecta en la Etapa N» y no guardan nada). No publiques datos reales todavía.
+- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados, denuncias anónimas, chat de atención y notificaciones. **Todavía no:** el panel de administración (sigue mostrando «se conecta en la Etapa 10» y no guarda nada). No publiques datos reales todavía.
 - **Aprobar aliados y asignar planes** todavía se hace a mano con SQL (`GUIA_ETAPA_5.md`); el panel de administración llega en la Etapa 10. Hasta entonces ningún aliado aparece en el directorio sin que tú lo apruebes.
-- **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. Un administrador asigna los planes de pago manualmente (en la Etapa 9 se añade la «solicitud» de plan por parte del usuario). Los **recordatorios** de vacunas y citas por WhatsApp o correo están *previstos*, no activos: hoy el carnet solo marca «vencida» o «próxima» al abrirlo.
+- **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. Un administrador asigna los planes de pago manualmente (en la Etapa 9 se añade la «solicitud» de plan por parte del usuario). Los **recordatorios por WhatsApp o correo** están *previstos*, no activos: hoy los avisos de vacunas, desparasitaciones y citas llegan solo dentro de la plataforma (Notificaciones y campanita), cuando la persona entra al sitio.
 - **Faltan** eliminar la cuenta y el **aviso de privacidad y términos** (importante antes de recibir denuncias reales). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
-- **Responder el chat** también se hace con SQL hasta la Etapa 10 (consultas en `GUIA_ETAPA_7.md`); el chat no admite archivos adjuntos. Las notificaciones de respuesta se guardan pero todavía no se muestran (Etapa 8).
-- **Revisar y responder las denuncias** se hace con SQL hasta el panel de administración (Etapa 10; consultas en `GUIA_ETAPA_6.md`). No hay aviso automático al equipo cuando llega una denuncia (llega con las notificaciones, Etapa 8). Las evidencias se borran a mano.
+- **Responder el chat** también se hace con SQL hasta la Etapa 10 (consultas en `GUIA_ETAPA_7.md`); el chat no admite archivos adjuntos.
+- **Revisar y responder las denuncias** se hace con SQL hasta el panel de administración (Etapa 10; consultas en `GUIA_ETAPA_6.md`). Cuando llega una denuncia, el equipo recibe un aviso dentro de la plataforma (solo con el código, el tipo y el estado: nunca datos de quien denuncia); el botón «Ver» de ese aviso abre `admin.html`, que sigue pendiente (Etapa 10). Las evidencias se borran a mano.
 - **Los datos de autoridades de la página de denuncias** (fiscalía, autoridad de protección animal, PROFEPA) son orientativos y la propia página dice que se verificarán: **confírmalos antes de abrir el sitio al público**.
 - **Limpieza de archivos:** al reemplazar o quitar una foto, o eliminar una mascota, el navegador borra los archivos viejos; si se corta la conexión justo en ese momento puede quedar algún archivo huérfano (ocupa espacio, nadie lo ve). Está acotado por los topes por persona; una limpieza automática periódica se valorará en la Etapa 11.
 - **La foto de la placa QR es pública** (bucket `qr-photos`, solo para quien la elige) y cualquiera que tenga su dirección exacta puede verla; las demás fotos son privadas.
@@ -146,11 +164,12 @@ js/tp-pets.js         ayudas compartidas de mascotas, fotos firmadas y planes
 js/tp-biz.js          ayudas del directorio: categorías, enlaces de Google Maps/teléfono/WhatsApp, horarios
 js/tp-captcha.js      Cloudflare Turnstile (anti-robots): solo usa la clave PÚBLICA de config.js
 js/guard.js           protección de páginas privadas por rol
-js/layout.js          cabecera (según sesión), pie y avisos compartidos
+js/layout.js          cabecera (según sesión), campanita con el número de no leídas, recordatorios diarios, pie y avisos compartidos
 js/pages/             lógica de cada página: registro, login, recuperar, nueva-contraseña, perfil,
                       mascota, carnet, placa (en carnet.html), qr-publico, directorio y panel-aliado
                       (panel-aliado.js + un módulo por sección: panel-datos, -fotos, -horarios, -promos, -stats)
-                      denuncias (formulario anónimo + seguimiento) y chat (lista, hilo y mensajes en vivo)
+                      denuncias (formulario anónimo + seguimiento), chat (lista, hilo y mensajes en vivo)
+                      y notificaciones (lista, filtros, preferencias; la campanita vive en layout.js)
 js/tp-realtime.js     cliente mínimo de Supabase Realtime (WebSocket), usado por el chat
 js/plans.js           planes y selector mensual/anual
 _headers              cabeceras HTTP y CSP (Cloudflare Pages)
@@ -160,13 +179,14 @@ GUIA_ETAPA_4.md       pasos manuales de la Etapa 4 y lista de pruebas en tu siti
 GUIA_ETAPA_5.md       pasos manuales de la Etapa 5 (aprobar aliados, asignar planes) y lista de pruebas
 GUIA_ETAPA_6.md       pasos manuales de la Etapa 6 (Turnstile, función segura, secreto), revisión de denuncias y pruebas
 GUIA_ETAPA_7.md       pasos manuales de la Etapa 7 (actualizar SQL, responder el chat con SQL) y lista de pruebas
+GUIA_ETAPA_8.md       pasos manuales de la Etapa 8 (actualizar SQL, crear notificaciones de prueba) y lista de pruebas en tu sitio
 supabase/functions/   función segura submit-complaint (Edge Function; se pega en el editor de Supabase)
 database/             Etapa 2: SQL de la base de datos (ver abajo)
 pruebas-web/          pruebas de navegador con simuladores de Supabase (solo desarrollo):
                       probar_acceso.py (Etapa 3), probar_mascotas.py y probar_qr.py (Etapa 4),
                       probar_aliados.py (Etapa 5), probar_denuncias.py y probar_funcion.py (Etapa 6),
-                      probar_chat.py (Etapa 7);
-                      simuladores mock_supabase.py, mock_etapa4.py, mock_etapa5.py, mock_etapa6.py y mock_etapa7.py;
+                      probar_chat.py (Etapa 7), probar_notificaciones.py (Etapa 8);
+                      simuladores mock_supabase.py, mock_etapa4.py, mock_etapa5.py, mock_etapa6.py, mock_etapa7.py y mock_etapa8.py;
                       servidor_funcion.mjs ejecuta el código real de la función segura con Node
 ```
 
@@ -192,14 +212,14 @@ Los colores de la marca son **menta `#80E3B9`**, **lavanda `#C0B8E8`**, **azul c
 - **Rosa:** botones de acción destacada (por ejemplo «Crear cuenta», «Enviar»), etiqueta «Más popular», números de los pasos, avisos de «todavía no conectado» y mensajes de error.
 - **Azul cielo:** encabezados de página (en degradado con la menta), al pasar el cursor por los menús y avisos informativos.
 - **Lavanda:** pie de página, ilustración de las pantallas de acceso y globos del equipo en el chat.
-- Para que el texto se lea bien (los pasteles no tienen contraste suficiente), **el texto va en azul marino oscuro** (`#1F2B4D`), y los fondos grandes y las líneas usan **versiones muy claras de los mismos cuatro colores**. Los mensajes de error usan texto vino oscuro sobre el rosa. Todas las combinaciones de texto y fondo superan el contraste mínimo de 4.5:1 (se midió en el navegador en las páginas públicas y en el chat).
+- Para que el texto se lea bien (los pasteles no tienen contraste suficiente), **el texto va en azul marino oscuro** (`#1F2B4D`), y los fondos grandes y las líneas usan **versiones muy claras de los mismos cuatro colores**. Los mensajes de error usan texto vino oscuro sobre el rosa. Todas las combinaciones de texto y fondo superan el contraste mínimo de 4.5:1 (se midió en el navegador en las páginas públicas, en el chat y, con una comprobación automática, en Notificaciones y la campanita).
 - Los códigos QR siguen siendo **negro sobre blanco** a propósito: es lo que mejor leen las cámaras.
 
 ## Probar en tu computadora
 
 Desde la Etapa 3 hay que servir la carpeta (con doble clic en el archivo no funcionan las sesiones): `python3 -m http.server 8000` y entra a `http://localhost:8000`. Para que los correos de confirmación regresen ahí, añade `http://localhost:8000/**` en *Authentication → URL Configuration → Redirect URLs* (Paso 2 de `GUIA_ETAPA_3.md`).
 
-**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`), `python3 pruebas-web/probar_chat.py` (Etapa 7; requiere PostgreSQL local y las mismas variables) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
+**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`), `python3 pruebas-web/probar_chat.py` (Etapa 7) y `python3 pruebas-web/probar_notificaciones.py` (Etapa 8; ambas requieren PostgreSQL local y las mismas variables) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
 
 ## Publicar esta etapa (opcional, gratis)
 
@@ -275,6 +295,18 @@ Consecuencias para el diseño:
 5. **Sin adjuntos** en el chat (cuida el almacenamiento gratuito) y sin mensajes entre usuarios.
 6. **Enlace directo** `chat.html?c=ID`: solo funciona para la dueña de la conversación.
 
-## Siguiente: Etapa 8 (notificaciones)
+## Decisiones de la Etapa 8 que conviene confirmar
 
-Conectar `notificaciones.html` y la campanita: ver, marcar como leídas y preferencias de aviso (las respuestas del chat ya se guardan como notificaciones en la base), con aviso en vivo. Los correos son opcionales y dependen de tu decisión pendiente sobre el SMTP (cuenta de Gmail exclusiva del proyecto, o solo avisos dentro de la plataforma). Antes, completa y prueba la Etapa 7 con `GUIA_ETAPA_7.md`.
+1. **La campanita consulta cada 60 s (no en vivo)** para no gastar conexiones simultáneas del plan gratuito; solo Notificaciones usa conexión en vivo.
+2. **Recordatorios al visitar el sitio, sin tareas programadas.** Es lo más simple y no puede generar cargos; su costo es que dependen de que la persona entre. Las cuentas necesitan carnet (planes Pro y Huellita VIP) para tener vacunas que avisar.
+3. **Ventanas de aviso:** 7 días antes y hasta 60 días después de vencer; citas 48 horas antes. Se cambian con un número en el SQL.
+4. **Los avisos importantes («aviso») no se pueden silenciar.**
+5. **Tope de 200 por persona** con limpieza automática (leídas de más de 90 días y todo lo de más de 365).
+6. **Chat → equipo: un aviso por turno**, para no saturar al equipo ni llenar la base.
+7. **El aviso de respuesta del equipo lleva un adelanto de 140 caracteres** (solo lo ve su dueña). Si prefieres un texto genérico, se cambia.
+8. **Correos y WhatsApp: no existen todavía.** El interruptor de correo está bloqueado hasta que decidas el SMTP (cuenta de Gmail exclusiva del proyecto, o solo avisos dentro de la plataforma).
+9. **El botón «Ver» de los avisos al equipo abre `admin.html`**, que es una página pendiente hasta la Etapa 10; el equipo sigue respondiendo y revisando denuncias con SQL.
+
+## Siguiente: Etapa 9 (planes y suscripciones)
+
+Solicitud de plan por parte de la persona y asignación por el equipo, **sin cobros** (la contratación seguirá deshabilitada, sin tarjetas ni datos de pago) y con avisos de suscripción en Notificaciones. Antes, completa y prueba la Etapa 8 con `GUIA_ETAPA_8.md`. No avanzo a la Etapa 9 hasta que me lo pidas.
