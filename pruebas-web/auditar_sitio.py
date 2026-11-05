@@ -92,8 +92,8 @@ def run(ROOT):
           'innerHTML' in lay and not re.search(r'innerHTML\s*=[^;]*(location|search|hash|localStorage|\.rpc|\.rest|response|fetch)', lay))
     dbg = [f for f in jss if re.search(r'\bdebugger\b|console\.(log|debug|dir|table)\(', rd(f))]
     check('B4 Sin debugger ni console.log/debug/dir/table olvidados en el sitio', not dbg, dbg)
-    todo = [f for f in jss + htmls if re.search(r'(//|/\*|\*|<!--|#)\s*(TODO|FIXME|XXX)\b', rd(f)) or re.search(r'lorem ipsum|se activa en la Etapa|se conecta en la Etapa|Próximamente', rd(f), re.I)]
-    check('B5 Sin marcas de trabajo pendiente (TODO/FIXME/lorem/«se activa en la Etapa»/«Próximamente») en páginas ni scripts', not todo, todo)
+    todo = [f for f in jss + htmls if re.search(r'(//|/\*|\*|<!--|#)\s*(TODO|FIXME|XXX)\b', rd(f)) or re.search(r'lorem ipsum|se activa en la Etapa|se conecta en la Etapa|Próximamente|en construcci[óo]n|siguientes etapas|pr[óo]ximas etapas|por etapas|versi[óo]n futura|modelo de negocio propuesto', rd(f), re.I)]
+    check('B5 Sin marcas de trabajo pendiente (TODO/FIXME/lorem/«se activa en la Etapa»/«Próximamente»/«en construcción»/«por etapas»/«versión futura») en páginas ni scripts', not todo, todo)
     ext = []
     for f in jss:
         for u in re.findall(r"""['"`](https?://[^'"`\s)]+)""", rd(f)):
@@ -234,6 +234,7 @@ def selftest():
      ('script en línea', 'login.html', lambda s: s.replace('</body>', '<script>var a=1</script></body>'), 'D1'),
      ('.env.example con valor', '.env.example', lambda s: s + '\nSECRETO=abc123456\n', 'A5'),
      ('marca TODO', 'js/pages/planes.js', lambda s: s + '\n// TODO: arreglar\n', 'B5'),
+     ('texto de etapa vieja en la portada', 'index.html', lambda s: s.replace('</main>', '<p class="note">Plataforma en construcción por etapas: las cuentas se conectan en las siguientes etapas.</p></main>'), 'B5'),
      ('config.js con otra clave', 'js/config.js', lambda s: s.replace('sb_publishable_', 'sb_secret_'), 'A3'),
     ]
     miss = []

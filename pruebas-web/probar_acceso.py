@@ -147,7 +147,7 @@ with sync_playwright() as pw:
     # servicio de correo limitado
     be.reset(smtp_authorized=['equipo@ejemplo.mx']); pg.goto(f'{ORIGIN}/registro.html')
     reg('Pública', 'publico@ejemplo.mx', 'MiClaveSegura1', 'MiClaveSegura1', 'owner'); pg.wait_for_selector('#msg.err', timeout=3000)
-    check('SMTP de pruebas (solo equipo): mensaje claro y honesto', 'cuentas de prueba' in msg_text(pg), msg_text(pg))
+    check('SMTP de pruebas (solo equipo): mensaje claro y honesto', 'servicio de correo' in msg_text(pg) and 'limitado' in msg_text(pg) and 'equipo de TECNOPATITAS' in msg_text(pg) and 'Estamos configurando' not in msg_text(pg), msg_text(pg))
     be.reset(); be.rate_limited = True; pg.goto(f'{ORIGIN}/registro.html')
     reg('Rápida', 'rapida@ejemplo.mx', 'MiClaveSegura1', 'MiClaveSegura1', 'owner'); pg.wait_for_selector('#msg.err', timeout=3000)
     check('Límite de peticiones (429): mensaje claro', 'Demasiados intentos' in msg_text(pg), msg_text(pg))
