@@ -21,5 +21,5 @@ window.TP_CONFIG = Object.freeze({
   // Etapa 11 · Datos de quien responde por el sitio (aparecen en el aviso de privacidad y en los términos). Son PÚBLICOS: escribe solo lo que quieras mostrar.
   // RESPONSABLE: tu nombre o el de la microempresa · DOMICILIO: el que la ley pide en el aviso de privacidad · CONTACTO: un correo (o medio) para ejercer derechos sobre datos personales.
   LEGAL: Object.freeze({ RESPONSABLE: '', DOMICILIO: '', CONTACTO: '' }),
-  TURNSTILE_SITE_KEY: ''          // ← pega aquí tu «Site Key» de Cloudflare Turnstile (empieza con 0x4…). Vacío = sin anti-robots y sin denuncias.
+  TURNSTILE_SITE_KEY: '0x4AAAAAAF0HtqWbA1_WsqN4'          // ← pega aquí tu «Site Key» de Cloudflare Turnstile (empieza con 0x4…). Vacío = sin anti-robots y sin denuncias.
 });
