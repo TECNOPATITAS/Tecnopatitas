@@ -18,6 +18,7 @@
 const CFG = window.TP_CONFIG || {};
 const BASE = String(CFG.SUPABASE_URL || '').replace(/\/+$/, '');
 const KEY = String(CFG.SUPABASE_PUBLISHABLE_KEY || '');
+const FN_NAME_RE = /^[a-z][a-z0-9-]{2,40}$/;
 const STORE_KEY = 'tp-auth-v1';
 
 // ---------- Comprobaciones de arranque ----------
@@ -64,6 +65,7 @@ const MESSAGES = {
 };
 function errorMessage(e) {
   if (!e) return MESSAGES.network;
+  if (e.userMessage) return e.userMessage;                    // mensaje en español de una función segura del servidor (p. ej. denuncias)
   const code = e.code || '';
   if (code === 'P0001' && e.message && e.message.length < 200) return e.message;   // mensajes en español de nuestros disparadores (límites de plan, etc.)
   if (MESSAGES[code]) return MESSAGES[code];
@@ -194,17 +196,18 @@ async function consumeUrlCallback() {
 const ready = consumeUrlCallback().catch(() => {});
 
 // ---------- Autenticación ----------
-async function signUp({ email, password, displayName, accountType, redirectTo }) {
+const withCaptcha = (body, token) => token ? Object.assign(body, { gotrue_meta_security: { captcha_token: String(token) } }) : body;   // Cloudflare Turnstile; Supabase Auth lo comprueba si se activó «CAPTCHA protection»
+async function signUp({ email, password, displayName, accountType, redirectTo, captchaToken }) {
   const data = { display_name: displayName, account_type: accountType === 'business' ? 'business' : 'owner' };
-  const r = await http('/auth/v1/signup', { method: 'POST', query: redirectTo ? 'redirect_to=' + encodeURIComponent(redirectTo) : '', body: { email, password, data } });
+  const r = await http('/auth/v1/signup', { method: 'POST', query: redirectTo ? 'redirect_to=' + encodeURIComponent(redirectTo) : '', body: withCaptcha({ email, password, data }, captchaToken) });
   if (r && r.access_token) {                                  // la confirmación por correo está desactivada: entra directo
     writeSession(toSession(r)); cache = null; emit('SIGNED_IN');
     return { session: true };
   }
   return { session: false };                                  // pendiente de confirmar el correo (o correo ya existente: no se revela)
 }
-async function signIn(email, password) {
-  const r = await http('/auth/v1/token', { method: 'POST', query: 'grant_type=password', body: { email, password } });
+async function signIn(email, password, captchaToken) {
+  const r = await http('/auth/v1/token', { method: 'POST', query: 'grant_type=password', body: withCaptcha({ email, password }, captchaToken) });
   writeSession(toSession(r)); cache = null; emit('SIGNED_IN');
 }
 async function signOut() {
@@ -213,8 +216,8 @@ async function signOut() {
   emit('SIGNED_OUT', { manual: true });                       // cierre pedido por la persona (las páginas decidirán a dónde ir)
   if (s) { try { await http('/auth/v1/logout', { method: 'POST', query: 'scope=local', token: s.access_token }); } catch { /* ya cerrada localmente */ } }
 }
-async function resetPassword(email, redirectTo) {
-  await http('/auth/v1/recover', { method: 'POST', query: redirectTo ? 'redirect_to=' + encodeURIComponent(redirectTo) : '', body: { email } });
+async function resetPassword(email, redirectTo, captchaToken) {
+  await http('/auth/v1/recover', { method: 'POST', query: redirectTo ? 'redirect_to=' + encodeURIComponent(redirectTo) : '', body: withCaptcha({ email }, captchaToken) });
 }
 async function updatePassword(newPassword) {
   const s = await getSession();
@@ -240,6 +243,26 @@ async function rest(path, { method = 'GET', query, body, prefer, single, anon } 
   return authed('/rest/v1' + path, { method, query, body, headers, anon });
 }
 const rpc = (fn, args, opts) => rest('/rpc/' + encodeURIComponent(fn), { method: 'POST', body: args || {}, anon: !!(opts && opts.anon) });
+
+// ---------- Funciones seguras del servidor (Supabase Edge Functions) ----------
+// Se llaman SIN sesión y solo con la clave pública en «apikey» (nunca en «Authorization»: Supabase la tomaría por un JWT inválido).
+// Las funciones de TECNOPATITAS responden { ok, code?, error? } con el mensaje ya en español.
+async function fn(name, formData) {
+  if (!FN_NAME_RE.test(String(name))) throw new TPError('bad_function', 'Función no válida.');
+  try {
+    return await http('/functions/v1/' + name, { method: 'POST', body: formData });
+  } catch (e) {
+    if (!(e instanceof TPError) || e.code === 'network' || e.code === 'config') throw e;
+    const d = e.raw;
+    if (d && d.ok === false && typeof d.error === 'string' && d.error.length < 300) { e.userMessage = d.error; e.code = typeof d.code === 'string' ? d.code : e.code; throw e; }
+    if (e.status === 404) e.userMessage = 'Este servicio todavía no está activado en el servidor. Avisa al administrador.';
+    else if (e.status === 401 || e.status === 403) e.userMessage = 'El servidor rechazó la solicitud. Avisa al administrador.';
+    else if (e.status === 429) e.userMessage = MESSAGES.over_request_rate_limit;
+    else if (e.status === 413) e.userMessage = 'Los archivos son demasiado grandes. Prueba con menos fotos o más pequeñas.';
+    else e.userMessage = 'Ocurrió un error inesperado. Inténtalo de nuevo en unos minutos.';
+    throw e;
+  }
+}
 
 // ---------- Archivos (Supabase Storage) ----------
 // Buckets: avatars y pet-photos son PRIVADOS (se ven con URL firmada temporal); qr-photos (la foto que la persona decide mostrar
@@ -353,7 +376,7 @@ const checkEmail = e => (typeof e === 'string' && e.length <= 254 && EMAIL_RE.te
 
 window.TP = Object.freeze({
   ready, callback, onAuthChange, hasSession, getSession, me, homeFor, safeNext, errorMessage, TPError,
-  signUp, signIn, signOut, resetPassword, updatePassword, updateProfile, rest, rpc, storage,
+  signUp, signIn, signOut, resetPassword, updatePassword, updateProfile, rest, rpc, fn, storage,
   checkPassword, checkEmail, configError
 });
 })();

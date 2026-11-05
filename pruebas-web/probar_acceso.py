@@ -349,7 +349,7 @@ with sync_playwright() as pw:
     print('\n[9] Protección contra claves secretas en config.js')
     be.reset(); ctx = new_ctx(br); log = []; pg = new_page(ctx, log)
     ctx.route(f'{ORIGIN}/js/config.js', lambda r: r.fulfill(status=200, content_type='application/javascript',
-        body="window.TP_CONFIG=Object.freeze({SUPABASE_URL:'https://mtkbxnhsjqqdbrjeaslo.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_secret_ABCDEFGHIJKLMNOP'});"))
+        body="window.TP_CONFIG=Object.freeze({SUPABASE_URL:'https://mtkbxnhsjqqdbrjeaslo.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_" + "secret_ABCDEFGHIJKLMNOP'});"))
     pg.goto(f'{ORIGIN}/login.html'); pg.wait_for_selector('#msg.err'); pg.wait_for_timeout(200)
     check('Con una clave secreta en config.js, el sitio bloquea el formulario y muestra el error', pg.locator('button[type=submit]').is_disabled() and 'no está configurado' in msg_text(pg), msg_text(pg))
     check('...y no realiza ninguna petición a Supabase con esa clave', len(be.calls) == 0 and any('SECRETA' in m for m in log), (len(be.calls), log[:2]))

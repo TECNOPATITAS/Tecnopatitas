@@ -2,27 +2,28 @@
 
 Plataforma para el cuidado, protección y bienestar de las mascotas. Se construye **por etapas**; este archivo dice qué está terminado y qué no.
 
-## Estado actual: Etapa 5 de 11 (directorio público y panel de aliados)
+## Estado actual: Etapa 6 de 11 (denuncias anónimas y anti-robots)
 
 | Etapa | Contenido | Estado |
 |---|---|---|
 | 1 | Estructura, diseño y navegación | Terminada |
-| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4 y 5 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 34 comprobaciones |
+| 2 | Supabase: base de datos, permisos (RLS), almacenamiento y datos iniciales | Terminada. **Las Etapas 4, 5 y 6 amplían el SQL**: vuelve a ejecutar `database/00_instalar_todo.sql` (es seguro repetirlo); el verificador ahora tiene 35 comprobaciones |
 | 3 | Registro, inicio de sesión, recuperar contraseña, sesión, roles y protección de páginas | Terminada y probada en tu sitio real |
 | 4 | Mascotas, carnet de salud digital, subida de fotos (Supabase Storage) y placa QR (Huellita VIP) | Terminada y probada en tu sitio real |
-| **5** | **Directorio público y panel de aliados: alta del negocio, datos, logotipo y fotos, horarios, promociones, estadísticas y enlaces a Google Maps** | **Escrita y probada contra simuladores (172 pruebas de navegador + 395 de SQL). Falta que la pruebes en tu sitio real: `GUIA_ETAPA_5.md`** |
-| 6–11 | Denuncias, chat, notificaciones, planes, panel admin, publicación | Pendientes |
+| 5 | Directorio público y panel de aliados: alta del negocio, datos, logotipo y fotos, horarios, promociones, estadísticas y enlaces a Google Maps | Terminada y probada por ti |
+| **6** | **Denuncias anónimas con código de seguimiento, fotos de evidencia por una función segura y anti-robots con Cloudflare Turnstile (también en registro, inicio de sesión y recuperar)** | **Escrita y probada contra simuladores (140 pruebas de navegador + 76 de la función + 420 de SQL). Falta que la pruebes en tu sitio real y que hagas los pasos manuales: `GUIA_ETAPA_6.md`** |
+| 7–11 | Chat, notificaciones, planes, panel admin, publicación | Pendientes |
 
 **Terminado en la Etapa 2** (carpeta `database/`)
 
 - 19 tablas en `public` + 2 internas en `private`, con claves, índices y restricciones (CHECK) que impiden datos incoherentes.
 - Seguridad por filas (RLS) en **todas** las tablas; permisos por columna (nadie puede cambiar su rol, su suspensión, su plan o el dueño de una mascota desde el navegador); funciones del servidor para todo lo sensible.
 - Los 5 planes (nombres, precios MXN y beneficios exactos) y los permisos de cada plan **aplicados en el servidor**, no solo en pantalla.
-- Denuncias anónimas **sin ningún dato que identifique a quien reporta**, con código de seguimiento, trampa anti-robots y límite de envíos.
+- Tablas y funciones para denuncias anónimas **sin ningún dato que identifique a quien reporta**, con código de seguimiento, trampa anti-robots y límite de envíos (conectadas a la página en la Etapa 6).
 - Chat, notificaciones, guías, directorio con filtros, placa QR con token aleatorio, bitácora de acciones de administración.
 - 6 buckets de archivos (solo JPG/PNG/WebP, con tope de tamaño y de cantidad por persona). El sexto, `qr-photos`, se añadió en la Etapa 4.
 - Datos de demostración **opcionales y claramente falsos** (`06_datos_demo.sql`).
-- 395 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
+- 420 pruebas automáticas de seguridad y funcionamiento (`database/pruebas/`; 395 hasta la Etapa 5) y un verificador de solo lectura para tu Supabase (`database/verificar_seguridad.sql`).
 
 **Cómo se probó la Etapa 2, con honestidad**
 
@@ -73,18 +74,40 @@ Desde mi entorno no hay acceso a tu Supabase (y no debe haberlo), así que las p
 - **26 sabotajes de la interfaz** (por ejemplo, mostrar la descripción como HTML, no validar el enlace de WhatsApp, no borrar la foto anterior, permitir una promoción sin cupo, tratar a una cuenta suspendida como activa) y los 26 fueron detectados; dos de esas pruebas de sabotaje dejaron al descubierto huecos en mis pruebas, que se completaron. Revisando capturas de pantalla apareció además un defecto real (el texto «null» en algunas secciones del panel), que se corrigió y ahora tiene su prueba.
 - **Lo que no se pudo probar:** el Storage y PostgREST reales de tu Supabase (el simulador sigue la documentación oficial; los detalles solo se confirman en tu sitio: por eso `GUIA_ETAPA_5.md` trae una lista de comprobaciones), la apertura real de Google Maps y la vista en un teléfono físico (se revisó con pantalla de 390 px de ancho).
 
+**Terminado en la Etapa 6** (guía: `GUIA_ETAPA_6.md`)
+
+- **Denuncias anónimas** (`denuncias.html`): tipo de situación, descripción (30–4000 caracteres), fecha aproximada, estado, municipio, referencia opcional y hasta 3 fotos. **No se pide ni se envía nombre, correo, teléfono ni sesión** (aunque la persona tenga una cuenta abierta) y la tabla `complaints` no tiene ninguna columna que identifique a quien reporta. Al enviar se muestra un **código de seguimiento** `TP-XXXX-XXXX` que no se puede recuperar.
+- **Función segura `submit-complaint`** (Supabase Edge Function, `supabase/functions/submit-complaint/index.ts`): es la **única puerta** de entrada. Valida los datos, comprueba **Cloudflare Turnstile en el servidor** con una clave secreta que nunca está en el navegador ni en el repositorio, aplica los límites **antes** de subir archivos, limpia cada foto (solo JPEG; se eliminan EXIF/GPS, comentarios y miniaturas) y la guarda en el bucket **privado** `complaint-evidence`. Si algo falla, no queda nada guardado. Si falta la clave de Turnstile o Cloudflare no responde, **rechaza** el reporte (falla cerrado). Las funciones SQL `submit_complaint` y `complaint_precheck` ya **no** las puede llamar el navegador: solo esa función con la clave del servidor.
+- **Límites:** 5 reportes por hora y 15 por día por visitante (código derivado de la IP que cambia cada día; no se guarda la IP), 300 al día en total y 100 con fotos al día, 300 MB de evidencias en total, y consulta de seguimiento limitada a 30 por hora. Campo trampa (honeypot) contra robots simples.
+- **Seguimiento público:** con el código se ve el estado (recibida, en revisión, en proceso, canalizada, cerrada), las fechas y el «mensaje del equipo»; nunca las notas internas. «Canalizada» aclara que TECNOPATITAS **no sustituye una denuncia oficial**.
+- **Turnstile también en registro, inicio de sesión y recuperar contraseña** (`js/tp-captcha.js`): si hay una Site Key en `js/config.js` se muestra el recuadro y se envía el token; Supabase lo comprueba cuando activas **Authentication → Attack Protection → CAPTCHA** (Paso 7 de la guía, opcional). Sin Site Key todo funciona como en la Etapa 3.
+- Si falta algo (Site Key, función, secreto), la página **lo dice y bloquea el formulario**; nunca finge que el reporte se envió. Si por error se pega la clave **secreta** en `config.js`, la página se niega a funcionar y lo avisa.
+- La CSP de `_headers` permite scripts y marcos solo de `challenges.cloudflare.com` (además de los propios).
+- Todo lo que viene del servidor se muestra como **texto**.
+
+**Cómo se probó la Etapa 6, con honestidad**
+
+- **420 pruebas de SQL** (las de denuncias se reescribieron: nadie —anónimo, con sesión ni administrador— puede llamar a las funciones de envío; límites por IP, por día y globales; cuota de evidencias) y **35 comprobaciones** del verificador; el instalador se ejecutó sobre una base ya instalada (actualización) y sobre una limpia. 7 «sabotajes» del SQL fueron detectados.
+- **76 pruebas de la función segura** (`pruebas-web/probar_funcion.py`): se ejecuta el **código real** de `index.ts` contra una base PostgreSQL local con el esquema real y un Turnstile y un Storage simulados: validaciones, anti-robots (token falso, repetido, Cloudflare caído), límites, fotos con EXIF/GPS/comentarios/datos al final del archivo, anonimato, y que no quede basura si algo falla. **24 sabotajes** de la función (por ejemplo, no verificar Turnstile, confiar en una cabecera de IP falsificable, dejar los metadatos de las fotos, no borrar fotos si falla el registro) y los 24 fueron detectados; esas pruebas de sabotaje dejaron al descubierto huecos en mis pruebas, que se completaron.
+- **140 pruebas de navegador** en Chromium con **las mismas cabeceras CSP del sitio** (`pruebas-web/probar_denuncias.py`): formulario, fotos, código, anonimato (sin sesión ni cookies en la petición), errores del servidor, doble clic, campo trampa, seguimiento (incluido un mensaje hostil con HTML), Turnstile en registro/inicio/recuperar, script bloqueado y reintento, y diseño de 390 px y de escritorio. **30 sabotajes de la interfaz** (por ejemplo, enviar la sesión a la función segura, mostrar el mensaje del equipo como HTML, no reiniciar la verificación tras cada intento, no mandar el token de Turnstile en el registro, dibujar dos recuadros de verificación o quitar a Cloudflare de la CSP) y los 30 fueron detectados; uno de ellos dejó al descubierto un hueco en mis pruebas, que se completó (otro, que quitaba una comprobación duplicada, no cambiaba el comportamiento y se descartó).
+- Siguen pasando las regresiones de las Etapas 3, 4 y 5 (106 + 133 + 172 pruebas de navegador y los códigos QR).
+- Revisando capturas de pantalla aparecieron dos defectos reales de la interfaz (la casilla de aceptación partía su texto en columnas y las miniaturas tenían una sangría de más) y botones demasiado pequeños para el móvil; se corrigieron y ahora tienen su prueba.
+- **Lo que NO se pudo probar desde aquí:** (1) **Deno**, el entorno real de las Edge Functions: no se pudo instalar (red bloqueada), así que el mismo archivo se ejecutó con **Node 22**, que tiene las mismas funciones web (`fetch`, `FormData`, `crypto`); si Supabase se comporta distinto en algún detalle, solo se sabrá al desplegar; (2) el **Turnstile real** (se probó con una versión simulada del script de Cloudflare; el recuadro de verdad, su dominio permitido y el *siteverify* real se confirman en tu sitio), (3) el **Storage y la IP** reales de Supabase (la IP llega en las cabeceras `cf-connecting-ip` / `x-real-ip`; si en tu proyecto llegaran vacías, todos compartirían un solo límite —es seguro, pero habría que ajustarlo—: la prueba 16 de la guía lo comprueba) y (4) la apertura en un teléfono físico. Por eso `GUIA_ETAPA_6.md` trae una lista de 18 comprobaciones.
+
 **Límite importante del plan gratuito de Supabase:** su servicio de correo de cortesía solo envía a los correos de tu equipo y a un máximo de 2 por hora. Para que cualquier persona pueda registrarse hará falta un SMTP propio. **Sin dominio** (decisión actual) no sirven Resend ni Brevo; la opción gratuita viable es una cuenta de Gmail exclusiva del proyecto con contraseña de aplicación (Paso 4 de `GUIA_ETAPA_3.md`). Los correos de notificación de la Etapa 9 se replantearán con ese límite.
 
 **No terminado (y no finge estarlo)**
 
-- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio y panel de aliados. **Todavía no:** denuncias, chat, notificaciones y el panel de administración (siguen mostrando «se conecta en la Etapa N» y no guardan nada). No publiques datos reales todavía.
+- **Conectado a la base de datos:** cuentas, perfil, mascotas, carnet, fotos, placa QR, directorio, panel de aliados y denuncias anónimas. **Todavía no:** chat, notificaciones y el panel de administración (siguen mostrando «se conecta en la Etapa N» y no guardan nada). No publiques datos reales todavía.
 - **Aprobar aliados y asignar planes** todavía se hace a mano con SQL (`GUIA_ETAPA_5.md`); el panel de administración llega en la Etapa 10. Hasta entonces ningún aliado aparece en el directorio sin que tú lo apruebes.
 - **Cobros y contratación no están habilitados.** No se guarda ninguna tarjeta ni dato financiero. Un administrador asigna los planes de pago manualmente (en la Etapa 9 se añade la «solicitud» de plan por parte del usuario). Los **recordatorios** de vacunas y citas por WhatsApp o correo están *previstos*, no activos: hoy el carnet solo marca «vencida» o «próxima» al abrirlo.
-- **Faltan** eliminar la cuenta, el **aviso de privacidad y términos**, y el anti-robots en el registro (Turnstile, Etapa 6). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
+- **Faltan** eliminar la cuenta y el **aviso de privacidad y términos** (importante antes de recibir denuncias reales). Las protecciones de página del navegador son comodidad: la seguridad real está en las políticas RLS.
+- **Revisar y responder las denuncias** se hace con SQL hasta el panel de administración (Etapa 10; consultas en `GUIA_ETAPA_6.md`). No hay aviso automático al equipo cuando llega una denuncia (llega con las notificaciones, Etapa 8). Las evidencias se borran a mano.
+- **Los datos de autoridades de la página de denuncias** (fiscalía, autoridad de protección animal, PROFEPA) son orientativos y la propia página dice que se verificarán: **confírmalos antes de abrir el sitio al público**.
 - **Limpieza de archivos:** al reemplazar o quitar una foto, o eliminar una mascota, el navegador borra los archivos viejos; si se corta la conexión justo en ese momento puede quedar algún archivo huérfano (ocupa espacio, nadie lo ve). Está acotado por los topes por persona; una limpieza automática periódica se valorará en la Etapa 11.
 - **La foto de la placa QR es pública** (bucket `qr-photos`, solo para quien la elige) y cualquiera que tenga su dirección exacta puede verla; las demás fotos son privadas.
 - **El QR contiene la dirección del sitio** (hoy `…pages.dev`). Si algún día cambia la dirección, los QR impresos hay que reponerlos.
-- Las denuncias se **registran en la plataforma**; la plataforma no las presenta ante ninguna autoridad.
+- Las denuncias se **registran en la plataforma**; la plataforma no las presenta ante ninguna autoridad. Tampoco hay anonimato técnico absoluto frente a los proveedores de infraestructura (Supabase, Cloudflare): lo que se garantiza es que TECNOPATITAS no guarda nada que identifique a quien reporta.
 - Las guías y los aliados de la demostración son **contenido de ejemplo**. Las guías están marcadas «pendiente de revisión veterinaria» y deben revisarse antes de presentarlas como definitivas.
 
 ## Estructura
@@ -102,21 +125,27 @@ js/media.js           reduce y recodifica imágenes a JPEG (quita EXIF/GPS) ante
 js/qr.js              generador de códigos QR propio (sin servicios externos)
 js/tp-pets.js         ayudas compartidas de mascotas, fotos firmadas y planes
 js/tp-biz.js          ayudas del directorio: categorías, enlaces de Google Maps/teléfono/WhatsApp, horarios
+js/tp-captcha.js      Cloudflare Turnstile (anti-robots): solo usa la clave PÚBLICA de config.js
 js/guard.js           protección de páginas privadas por rol
 js/layout.js          cabecera (según sesión), pie y avisos compartidos
 js/pages/             lógica de cada página: registro, login, recuperar, nueva-contraseña, perfil,
                       mascota, carnet, placa (en carnet.html), qr-publico, directorio y panel-aliado
                       (panel-aliado.js + un módulo por sección: panel-datos, -fotos, -horarios, -promos, -stats)
+                      y denuncias (formulario anónimo + seguimiento)
 js/plans.js           planes y selector mensual/anual
 _headers              cabeceras HTTP y CSP (Cloudflare Pages)
 .env.example          solo para claves secretas futuras (Edge Functions)
 GUIA_ETAPA_3.md       pasos manuales de la Etapa 3 y lista de pruebas en tu sitio
 GUIA_ETAPA_4.md       pasos manuales de la Etapa 4 y lista de pruebas en tu sitio
 GUIA_ETAPA_5.md       pasos manuales de la Etapa 5 (aprobar aliados, asignar planes) y lista de pruebas
+GUIA_ETAPA_6.md       pasos manuales de la Etapa 6 (Turnstile, función segura, secreto), revisión de denuncias y pruebas
+supabase/functions/   función segura submit-complaint (Edge Function; se pega en el editor de Supabase)
 database/             Etapa 2: SQL de la base de datos (ver abajo)
 pruebas-web/          pruebas de navegador con simuladores de Supabase (solo desarrollo):
                       probar_acceso.py (Etapa 3), probar_mascotas.py y probar_qr.py (Etapa 4),
-                      probar_aliados.py (Etapa 5); simuladores mock_supabase.py, mock_etapa4.py y mock_etapa5.py
+                      probar_aliados.py (Etapa 5), probar_denuncias.py y probar_funcion.py (Etapa 6);
+                      simuladores mock_supabase.py, mock_etapa4.py, mock_etapa5.py y mock_etapa6.py;
+                      servidor_funcion.mjs ejecuta el código real de la función segura con Node
 ```
 
 ### Carpeta `database/`
@@ -127,7 +156,7 @@ pruebas-web/          pruebas de navegador con simuladores de Supabase (solo des
 | `00_instalar_todo.sql` | Todo junto (01 a 05) para pegarlo de una vez. Se puede ejecutar varias veces |
 | `01_esquema.sql` … `05_datos_base.sql` | Las partes: tablas · funciones · permisos (RLS) · archivos · planes |
 | `06_datos_demo.sql` | Opcional: 6 aliados ficticios y 8 guías generales de ejemplo |
-| `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (34 comprobaciones) |
+| `verificar_seguridad.sql` | Solo lectura: confirma que tu Supabase quedó seguro (35 comprobaciones) |
 | `construir_instalador.sh` | Regenera `00_instalar_todo.sql` si editas 01–05 |
 | `pruebas/` | Batería de pruebas y simulador de Supabase (solo para desarrollo local) |
 
@@ -137,7 +166,7 @@ Todas las rutas son relativas.
 
 Desde la Etapa 3 hay que servir la carpeta (con doble clic en el archivo no funcionan las sesiones): `python3 -m http.server 8000` y entra a `http://localhost:8000`. Para que los correos de confirmación regresen ahí, añade `http://localhost:8000/**` en *Authentication → URL Configuration → Redirect URLs* (Paso 2 de `GUIA_ETAPA_3.md`).
 
-**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
+**Pruebas automáticas (opcional, para quien edite el código):** `pip install playwright && playwright install chromium`, luego `pip install pillow numpy opencv-python-headless`, luego `python3 pruebas-web/probar_acceso.py` (Etapa 3), `python3 pruebas-web/probar_mascotas.py` y `python3 pruebas-web/probar_qr.py` (Etapa 4), `python3 pruebas-web/probar_aliados.py` (Etapa 5), `python3 pruebas-web/probar_funcion.py` y `python3 pruebas-web/probar_denuncias.py` (Etapa 6; requieren PostgreSQL local, Node 22 y las variables `PGHOST`/`PGPORT`/`PGUSER`) y `bash database/pruebas/ejecutar_pruebas.sh` (SQL, requiere PostgreSQL).
 
 ## Publicar esta etapa (opcional, gratis)
 
@@ -155,12 +184,13 @@ Los nombres de los menús de Cloudflare cambian con frecuencia; si algo no coinc
 | **Supabase** | 2 proyectos activos; 500 MB de base de datos; 1 GB de archivos; 5 GB de transferencia al mes; 50,000 usuarios activos al mes; unos 200 usuarios conectados a Realtime a la vez; 500,000 invocaciones de funciones al mes. **El proyecto se pausa tras 7 días sin actividad** y hay que reactivarlo a mano desde el panel (los datos se conservan). |
 | **Resend** | 3,000 correos al mes y **100 al día**; 1 dominio. Los correos recibidos también cuentan. Si se supera, el envío se pausa; no hay cobro automático. |
 | **Cloudflare Pages** | 500 compilaciones al mes, 1 a la vez; 20,000 archivos por sitio; 25 MiB por archivo. |
+| **Cloudflare Turnstile** | Gratuito: hasta 20 widgets, desafíos ilimitados y 10 dominios por widget; sin tarjeta. |
 
 Consecuencias para el diseño:
 
 - **Pausa de Supabase:** para una demostración escolar es aceptable. Si el sitio se usa con personas reales, habrá que mantenerlo activo o aceptar que a veces se pause. Lo documentaremos en la Etapa 11.
 - **Correos:** con 100 al día, los recordatorios por correo se enviarán en lotes y con tope diario. Si se alcanza, se registrará como «no enviado» y nunca se mostrará como enviado.
-- **Fotos de denuncias:** 1 GB se agota rápido; se limitarán a 3 archivos de 5 MB por reporte.
+- **Fotos de denuncias:** 1 GB se agota rápido; cada reporte admite hasta 3 fotos de máximo 2 MB (ya reducidas, suelen pesar ~300 KB) y la función se niega a recibir más evidencias al llegar a 300 MB.
 - Los límites cambian con el tiempo. Se vuelven a comprobar antes de cada integración.
 
 ## Decisiones de la Etapa 2 que conviene confirmar
@@ -170,8 +200,8 @@ Consecuencias para el diseño:
 3. **Planes de pago:** un usuario **no puede activarse un plan** desde el navegador; lo asigna un administrador. Así no hay forma de «regalarse» beneficios. Cancelar es inmediato.
 4. **Directorio público:** cualquiera ve los aliados *aprobados*. Sin plan de aliado solo se muestra nombre, categoría, descripción y dirección; la **ficha completa** (teléfono, horario, logotipo, fotos y promociones) llega con Plata u Oro, y el **WhatsApp** y el lugar prioritario solo con Oro. Nunca se muestra quién es el dueño. Si un plan vence, los datos se conservan pero dejan de mostrarse.
 5. **Privacidad del administrador:** un admin gestiona usuarios, aliados, denuncias, guías y chat, pero **no puede leer las mascotas ni el carnet** de otras personas.
-6. **Límite anti-abuso por IP:** las denuncias se limitan por visitante usando un código derivado de la IP (no se guarda la IP). Detrás de redes compartidas puede ser impreciso; en la Etapa 6 se añadirá Cloudflare Turnstile (gratuito).
-7. **Fotos de denuncias:** se suben mediante una función segura en la Etapa 6 (no hay subida directa desde el navegador).
+6. **Límite anti-abuso por IP:** las denuncias se limitan por visitante usando un código derivado de la IP (no se guarda la IP). Detrás de redes compartidas puede ser impreciso; desde la Etapa 6 se suma Cloudflare Turnstile (gratuito).
+7. **Fotos de denuncias:** se suben mediante una función segura (Etapa 6; no hay subida directa desde el navegador).
 8. **Datos de demostración:** hay que revisarlos y borrarlos antes de abrir el sitio al público (`delete from public.businesses where is_demo;`).
 
 ## Decisiones de la Etapa 4 que conviene confirmar
@@ -192,6 +222,17 @@ Consecuencias para el diseño:
 6. **Aprobar, suspender, verificar y asignar plan se hace con SQL hasta la Etapa 10** (el panel de administración). Mientras tanto ningún aliado aparece en el directorio sin tu aprobación.
 7. **Un máximo de 5 establecimientos por cuenta** y un mismo plan para todos los de la cuenta.
 
-## Siguiente: Etapa 6 (denuncias anónimas)
+## Decisiones de la Etapa 6 que conviene confirmar
 
-Conectar `denuncias.html`: reporte **sin ningún dato que identifique a quien denuncia**, código de seguimiento, evidencias (fotos) mediante una función segura, anti-robots con Cloudflare Turnstile (gratuito) y límite de envíos. La plataforma **registra** las denuncias; no las presenta ante ninguna autoridad. Antes, completa y prueba la Etapa 5 con `GUIA_ETAPA_5.md`.
+1. **Hasta 3 fotos por reporte, de máximo 2 MB cada una** (reducidas por el navegador a 1280 px y re-codificadas como JPEG). Es menos de los 5 MB propuestos al inicio: con 300 MB de evidencias se alcanzan cientos de reportes con fotos dentro del 1 GB gratuito.
+2. **Límites:** 5 reportes por hora y 15 por día por visitante; 300 al día en total y 100 con fotos al día; 300 MB de evidencias. Detrás de una red compartida (escuela, oficina) varias personas comparten el límite.
+3. **El código de seguimiento no se puede recuperar** (así se protege el anonimato). Si se pierde, hay que hacer otro reporte.
+4. **El mensaje público del equipo** (`public_update`) lo ve cualquiera que tenga el código; no debe llevar datos personales.
+5. **La función falla cerrado:** sin la clave secreta de Turnstile, o si Cloudflare no responde, no se recibe ningún reporte (mejor eso que dejar la puerta abierta a robots).
+6. **Turnstile en el acceso es opcional** (Paso 7 de la guía) y conviene activarlo antes de abrir el registro al público; si se activa antes de publicar la Site Key, nadie podría entrar.
+7. **Sin dominio propio**, Turnstile se configura para `tecnopatitas.pages.dev`; las vistas previas de Pages no estarán permitidas.
+8. **Revisión con SQL** hasta la Etapa 10; las evidencias se descargan desde Storage.
+
+## Siguiente: Etapa 7 (chat de atención)
+
+Conectar `chat.html`: conversación entre una persona usuaria y el equipo, con mensajes guardados en Supabase (Realtime), límites diarios por cuenta para cuidar el plan gratuito y sin mensajes entre usuarios. Antes, completa y prueba la Etapa 6 con `GUIA_ETAPA_6.md`. También queda pendiente tu decisión sobre el correo (Gmail como SMTP de Supabase, o cuentas de prueba confirmadas a mano).

@@ -131,3 +131,18 @@ label.inline{display:flex;gap:10px;align-items:center;margin:0}label.inline sele
 .sbar .fill{display:block;height:100%;border-radius:99px}.fill.v{background:var(--pt)}.fill.m{background:var(--co)}
 .statsday .n{display:inline-block;width:32px;text-align:right;font-weight:800}
 @media(max-width:600px){.bizlist{grid-template-columns:1fr}}
+
+/* Etapa 6: denuncias anónimas y anti-robots */
+.g2.top{align-items:start}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.captchahost{min-height:0;margin:0 0 14px}.captcha{min-height:65px}
+.counter{display:block;text-align:right}
+.thumbs,.card .thumbs{list-style:none;margin:0 0 14px;padding:0;display:flex;gap:12px;flex-wrap:wrap}
+.thumbs li{display:flex;flex-direction:column;gap:4px;align-items:flex-start;font-size:.85rem}
+.thumbs img{width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid var(--ln);background:var(--mn2)}
+.codebox{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--mn2);border:2px dashed var(--pt);border-radius:16px;padding:14px 18px;margin:8px 0 14px}
+.codebig{font:800 clamp(1.5rem,5vw,2.1rem)/1.1 ui-monospace,Consolas,monospace;letter-spacing:.06em;color:var(--pt2);user-select:all}
+.trackres{margin-top:12px;display:flex;flex-direction:column;gap:8px}.trackres p{margin:0}
+.badge.info{background:#fff3e6;color:#5a3a10;border:1px solid #f1d2ad}
+#f-seguimiento{margin-bottom:6px}
+#dn-listo .btn,.thumbs .btn,#f-seguimiento .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}   /* botones cómodos de tocar en el móvil */

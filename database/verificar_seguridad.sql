@@ -21,12 +21,12 @@ tbl as (
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname in ('public', 'private') and c.relkind in ('r', 'p')
 ),
-exp_public_fn as (select unnest(array['directory_get','directory_search','directory_track','get_public_pet_profile','submit_complaint','track_complaint']) as f),
+exp_public_fn as (select unnest(array['directory_get','directory_search','directory_track','get_public_pet_profile','track_complaint']) as f),
 exp_auth_fn as (select unnest(array[
   'admin_assign_subscription','admin_cancel_subscription','admin_dashboard_stats','admin_list_users','admin_renew_subscription',
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
   'cancel_my_subscription','directory_get','directory_search','directory_track','get_public_pet_profile','is_active_user','is_admin',
-  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','storage_has_room','submit_complaint','track_complaint']) as f),
+  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','storage_has_room','track_complaint']) as f),
 checks(n, grupo, comprobacion, ok, detalle) as (values
   -- ---------------- Estructura ----------------
   (10, 'Estructura', 'Existen las 19 tablas de la plataforma en "public"',
@@ -63,11 +63,11 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     coalesce((select string_agg(relname, ',' order by relname) from tbl
               where nspname = 'public' and has_any_column_privilege('anon', oid, 'select,insert,update,references')), '') = 'care_guides,subscription_plans',
     (select string_agg(relname, ',' order by relname) from tbl where nspname = 'public' and has_any_column_privilege('anon', oid, 'select,insert,update,references'))),
-  (31, 'Permisos', 'Un visitante solo puede ejecutar las 6 funciones públicas (denuncias, seguimiento, QR, directorio y su conteo de visitas)',
+  (31, 'Permisos', 'Un visitante solo puede ejecutar las 5 funciones públicas (seguimiento de denuncias, QR, directorio y su conteo de visitas)',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_public_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute'))),
-  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 23 funciones previstas',
+  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 22 funciones previstas',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_auth_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')
@@ -120,6 +120,15 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
       or has_any_column_privilege('anon', 'public.complaints', 'insert,select,update')
       or has_column_privilege('authenticated', 'public.complaints', 'description', 'update')
       or has_column_privilege('authenticated', 'public.complaints', 'tracking_code', 'update')), null),
+  (48, 'Columnas protegidas', 'Denuncias: solo la función segura del servidor (service_role) puede registrarlas, con límites y anti-robots; ni visitantes ni usuarios',
+    (select count(*) from fn where proname = 'submit_complaint') = 1
+    and (select count(*) from fn where proname = 'complaint_precheck') = 1
+    and not exists (select 1 from fn where proname in ('submit_complaint', 'complaint_precheck')
+                      and (has_function_privilege('anon', oid, 'execute') or has_function_privilege('authenticated', oid, 'execute')))
+    and not exists (select 1 from fn where proname in ('submit_complaint', 'complaint_precheck') and not has_function_privilege('service_role', oid, 'execute')),
+    (select string_agg(proname || '(' || pg_get_function_identity_arguments(oid) || ') anon=' || has_function_privilege('anon', oid, 'execute')
+                       || ' auth=' || has_function_privilege('authenticated', oid, 'execute') || ' servidor=' || has_function_privilege('service_role', oid, 'execute'), ' | ')
+       from fn where proname in ('submit_complaint', 'complaint_precheck'))),
   (46, 'Columnas protegidas', 'Notificaciones: solo se pueden marcar como leídas (no crear ni editar contenido)',
     not (has_table_privilege('authenticated', 'public.notifications', 'insert')
       or has_column_privilege('authenticated', 'public.notifications', 'title', 'update')

@@ -458,38 +458,74 @@ select t.ok('La tabla de denuncias NO tiene columnas que identifiquen a quien re
   (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'complaints'
      and column_name ~ '(user|owner|email|phone|reporter|session|^ip$|ip_|_ip|address)') = 0,
   (select string_agg(column_name, ',') from information_schema.columns where table_schema = 'public' and table_name = 'complaints'));
-insert into t.vars select 'c1', public.submit_complaint('maltrato_fisico', repeat('Descripción de los hechos. ', 3), current_date, 'Jalisco', 'Guadalajara', 'Parque central', null, '{}', null);
-select t.ok('Un visitante anónimo envía una denuncia y recibe un código de seguimiento',
-  (select v from t.vars where k = 'c1') ~ '^TP-[A-Z2-9]{4}-[A-Z2-9]{4}$', (select v from t.vars where k = 'c1'));
-select t.eq('Un visitante SIN sesión puede enviar denuncias (función pública)', null, 'anon',
-  $q$select public.submit_complaint('abandono', repeat('Un perro abandonado en la calle. ', 2), current_date, 'Jalisco', 'Zapopan')$q$,
-  'TP-%', '{"x-forwarded-for":"10.0.0.1"}');
+-- ---- Solo la función segura del servidor puede registrar denuncias (Etapa 6) ----
+select t.ex('Un anónimo NO puede registrar denuncias llamando a la base de datos (debe pasar por Turnstile)', null, 'anon', $q$select public.submit_complaint('abandono', repeat('Un perro abandonado en la calle. ', 2), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 42501%');
+select t.ex('Un usuario con sesión tampoco', '{A}', 'authenticated', $q$select public.submit_complaint('abandono', repeat('Un perro abandonado en la calle. ', 2), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 42501%');
+select t.ex('Ni siquiera un administrador', '{D}', 'authenticated', $q$select public.submit_complaint('abandono', repeat('Un perro abandonado en la calle. ', 2), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 42501%');
+select t.ex('Un anónimo NO puede usar el paso previo (consumir cupos de otros)', null, 'anon', $q$select public.complaint_precheck('203.0.113.9', 0)$q$, 'ERR 42501%');
+select t.ex('Un usuario con sesión tampoco', '{A}', 'authenticated', $q$select public.complaint_precheck('203.0.113.9', 0)$q$, 'ERR 42501%');
+select t.eq('Solo existe la versión nueva de submit_complaint (la anterior, pública, se eliminó)', null, 'service_role',
+  $q$select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'submit_complaint'$q$, '1');
 select t.ex('Un anónimo NO puede insertar denuncias directamente', null, 'anon',
   $q$insert into public.complaints (tracking_code, type, description, approx_date, state, municipality) values ('TP-AAAA-AAAA', 'otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 42501%');
 select t.ex('Un usuario con sesión tampoco puede insertar directamente', '{A}', 'authenticated',
   $q$insert into public.complaints (tracking_code, type, description, approx_date, state, municipality) values ('TP-AAAA-AAAA', 'otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 42501%');
 select t.ex('Un anónimo NO puede leer denuncias', null, 'anon', $q$select * from public.complaints$q$, 'ERR 42501%');
 select t.eq('Un usuario normal ve 0 denuncias', '{A}', 'authenticated', $q$select count(*) from public.complaints$q$, '0');
-select t.ex('Descripción muy corta rechazada', null, 'anon', $q$select public.submit_complaint('abandono', 'corta', current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 22023%', '{"x-forwarded-for":"10.0.0.2"}');
-select t.ex('Tipo inválido rechazado', null, 'anon', $q$select public.submit_complaint('hackeo', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 22023%', '{"x-forwarded-for":"10.0.0.2"}');
-select t.ex('Fecha futura rechazada', null, 'anon', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date + 30, 'Jalisco', 'Zapopan')$q$, 'ERR 22023%', '{"x-forwarded-for":"10.0.0.2"}');
-select t.ex('Falta el municipio', null, 'anon', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', '')$q$, 'ERR 22023%', '{"x-forwarded-for":"10.0.0.2"}');
-select t.ex('Más de 3 fotos rechazado', null, 'anon', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['a.jpg','b.jpg','c.jpg','d.jpg'])$q$, 'ERR 22023%', '{"x-forwarded-for":"10.0.0.2"}');
-select t.ex('Ruta de foto con ".." rechazada', null, 'anon', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['../../etc/passwd'])$q$, 'ERR 22023%', '{"x-forwarded-for":"10.0.0.2"}');
-select count(*) as antes from public.complaints \gset
-select t.eq('Robot (campo trampa lleno): responde con un código falso', null, 'anon',
-  $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, '{}', 'http://spam.com')$q$, 'TP-%', '{"x-forwarded-for":"10.0.0.3"}');
-select t.ok('...pero NO guarda nada', (select count(*) from public.complaints) = :antes);
--- Límite por visitante: 5 por hora
-select t.ex('Envío 1 de 5 desde una misma IP', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'OK rows=1', '{"x-forwarded-for":"10.0.0.9"}');
-select t.ex('Envío 2 de 5', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'OK rows=1', '{"x-forwarded-for":"10.0.0.9"}');
-select t.ex('Envío 3 de 5', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'OK rows=1', '{"x-forwarded-for":"10.0.0.9"}');
-select t.ex('Envío 4 de 5', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'OK rows=1', '{"x-forwarded-for":"10.0.0.9"}');
-select t.ex('Envío 5 de 5', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'OK rows=1', '{"x-forwarded-for":"10.0.0.9"}');
-select t.ex('Envío 6: bloqueado por exceso de envíos', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR P0001%Demasiadas%', '{"x-forwarded-for":"10.0.0.9"}');
-select t.ex('Otra IP distinta sí puede enviar', null, 'anon', $q$select public.submit_complaint('otra', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'OK rows=1', '{"x-forwarded-for":"10.0.0.10"}');
+
+-- ---- La función segura (service_role) ----
+select t.eq('La función segura registra una denuncia y devuelve un código de seguimiento', null, 'service_role',
+  $q$select public.submit_complaint('maltrato_fisico', repeat('Descripción de los hechos. ', 3), current_date, 'Jalisco', 'Guadalajara', 'Parque central')$q$, 'TP-%');
+insert into t.vars select 'c1', tracking_code from public.complaints order by created_at limit 1;
+select t.ok('El código tiene el formato TP-XXXX-XXXX (sin caracteres confusos)', (select v from t.vars where k = 'c1') ~ '^TP-[A-Z2-9]{4}-[A-Z2-9]{4}$', (select v from t.vars where k = 'c1'));
+select t.ex('Descripción muy corta rechazada', null, 'service_role', $q$select public.submit_complaint('abandono', 'corta', current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 22023%');
+select t.ex('Tipo inválido rechazado', null, 'service_role', $q$select public.submit_complaint('hackeo', repeat('x', 40), current_date, 'Jalisco', 'Zapopan')$q$, 'ERR 22023%');
+select t.ex('Fecha futura rechazada', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date + 30, 'Jalisco', 'Zapopan')$q$, 'ERR 22023%');
+select t.ex('Falta el municipio', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', '')$q$, 'ERR 22023%');
+select t.ex('Estado de más de 80 caracteres rechazado con mensaje claro', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, repeat('e', 81), 'Zapopan')$q$, 'ERR 22023%');
+select t.ex('Referencia del lugar de más de 300 caracteres rechazada', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', repeat('r', 301))$q$, 'ERR 22023%');
+select t.ex('Más de 3 fotos rechazado', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['11111111-1111-4111-8111-111111111111/1.jpg','11111111-1111-4111-8111-111111111111/2.jpg','11111111-1111-4111-8111-111111111111/3.jpg','11111111-1111-4111-8111-111111111111/3.jpg'])$q$, 'ERR 22023%');
+select t.ex('Ruta de foto con ".." rechazada', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['../../etc/passwd'])$q$, 'ERR 22023%');
+select t.ex('Rutas de otra carpeta rechazadas por la función', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['evidencia/1.jpg'])$q$, 'ERR 22023%');
+select t.ex('Extensión distinta de .jpg rechazada', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['11111111-1111-4111-8111-111111111111/1.png'])$q$, 'ERR 22023%');
+select t.ex('Una denuncia con 2 fotos válidas se registra', null, 'service_role', $q$select public.submit_complaint('abandono', repeat('x', 40), current_date, 'Jalisco', 'Zapopan', null, null, array['11111111-1111-4111-8111-111111111111/1.jpg','11111111-1111-4111-8111-111111111111/2.jpg'])$q$, 'OK rows=1');
+select t.eq('...y guarda sus 2 rutas', null, 'postgres', $q$select max(cardinality(photo_paths))::text from public.complaints$q$, '2');
+
+-- ---- Paso previo: límites por visitante (la IP llega como parámetro, no se lee de cabeceras que el navegador pueda falsear) ----
+select t.ex('Paso previo 1 de 5 desde una misma IP', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 0)$q$, 'OK rows=1');
+select t.ex('Paso previo 2 de 5', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 0)$q$, 'OK rows=1');
+select t.ex('Paso previo 3 de 5', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 1)$q$, 'OK rows=1');
+select t.ex('Paso previo 4 de 5', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 0)$q$, 'OK rows=1');
+select t.ex('Paso previo 5 de 5', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 0)$q$, 'OK rows=1');
+select t.ex('Envío 6: bloqueado por exceso de envíos', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 0)$q$, 'ERR P0001%Demasiadas%');
+select t.ex('Cambiar la cabecera x-forwarded-for NO evita el límite (se usa la IP que reporta el servidor)', null, 'service_role', $q$select public.complaint_precheck('10.0.0.9', 0)$q$, 'ERR P0001%Demasiadas%', '{"x-forwarded-for":"1.2.3.4","cf-connecting-ip":"5.6.7.8"}');
+select t.ex('Otra IP distinta sí puede enviar', null, 'service_role', $q$select public.complaint_precheck('10.0.0.10', 0)$q$, 'OK rows=1');
+select t.ex('Más de 3 fotos rechazado en el paso previo', null, 'service_role', $q$select public.complaint_precheck('10.0.0.11', 4)$q$, 'ERR 22023%');
+select t.ex('Fotos negativas rechazadas', null, 'service_role', $q$select public.complaint_precheck('10.0.0.11', -1)$q$, 'ERR 22023%');
 select t.eq('No se guarda la IP en ninguna parte (solo hashes sin la IP)', null, 'postgres',
   $q$select count(*) from private.rate_limits where key like '%10.0.0.%'$q$, '0');
+select t.eq('Sin IP conocida se usa una huella común (no se deja pasar sin límite)', null, 'service_role',
+  $q$select count(*) from (select public.complaint_precheck('', 0) from generate_series(1, 5)) x$q$, '5');
+select t.ex('...y la sexta sin IP también se bloquea', null, 'service_role', $q$select public.complaint_precheck(null, 0)$q$, 'ERR P0001%Demasiadas%');
+-- Topes globales (se preparan los contadores como administrador de la base de datos)
+insert into private.rate_limits (bucket, key, window_start, hits) values ('complaint_photo_g', 'all', date_trunc('day', now()), 99)
+  on conflict (bucket, key, window_start) do update set hits = 99;
+select t.ex('Tope global de reportes con fotos: el 100.º pasa', null, 'service_role', $q$select public.complaint_precheck('10.0.1.1', 1)$q$, 'OK rows=1');
+select t.ex('...el 101.º con fotos se bloquea', null, 'service_role', $q$select public.complaint_precheck('10.0.1.2', 1)$q$, 'ERR P0001%Demasiadas%');
+select t.ex('...pero un reporte sin fotos todavía pasa', null, 'service_role', $q$select public.complaint_precheck('10.0.1.3', 0)$q$, 'OK rows=1');
+insert into private.rate_limits (bucket, key, window_start, hits) values ('complaint_g', 'all', date_trunc('day', now()), 299)
+  on conflict (bucket, key, window_start) do update set hits = 299;
+select t.ex('Tope global diario de reportes: el 300.º pasa', null, 'service_role', $q$select public.complaint_precheck('10.0.2.1', 0)$q$, 'OK rows=1');
+select t.ex('...el 301.º se bloquea para todos', null, 'service_role', $q$select public.complaint_precheck('10.0.2.2', 0)$q$, 'ERR P0001%Demasiadas%');
+delete from private.rate_limits where bucket in ('complaint_g', 'complaint_photo_g');
+-- Cuota de almacenamiento de evidencias
+insert into storage.objects (bucket_id, name, metadata) values ('complaint-evidence', 'cuota/1.jpg', '{"size": 400000000}');
+select t.ex('Si las evidencias ya ocupan demasiado espacio, ya no se reciben fotos', null, 'service_role', $q$select public.complaint_precheck('10.0.3.1', 1)$q$, 'ERR P0001%no podemos recibir fotograf%');
+select t.ex('...pero los reportes sin fotos siguen entrando', null, 'service_role', $q$select public.complaint_precheck('10.0.3.2', 0)$q$, 'OK rows=1');
+delete from storage.objects where bucket_id = 'complaint-evidence' and name = 'cuota/1.jpg';
+select t.ex('Con espacio libre vuelven a recibirse fotos', null, 'service_role', $q$select public.complaint_precheck('10.0.3.3', 1)$q$, 'OK rows=1');
+delete from private.rate_limits where bucket in ('complaint_g', 'complaint_photo_g');
+
 -- Seguimiento
 select t.eq('El código permite consultar el estado', null, 'anon',
   format($q$select public.track_complaint(%L) ->> 'status'$q$, (select v from t.vars where k = 'c1')), 'recibida', '{"x-forwarded-for":"10.0.0.20"}');
@@ -497,7 +533,7 @@ select t.eq('El código funciona en minúsculas', null, 'anon',
   format($q$select public.track_complaint(lower(%L)) ->> 'status'$q$, (select v from t.vars where k = 'c1')), 'recibida', '{"x-forwarded-for":"10.0.0.20"}');
 select t.eq('Un código inexistente devuelve nada', null, 'anon', $q$select (public.track_complaint('TP-ZZZZ-ZZZZ') is null)::text$q$, 'true', '{"x-forwarded-for":"10.0.0.20"}');
 select t.eq('Un código mal formado devuelve nada (sin error)', null, 'anon', $q$select (public.track_complaint($x$' or 1=1 --$x$) is null)::text$q$, 'true');
-select t.eq('D (admin) ve las denuncias', '{D}', 'authenticated', $q$select count(*) >= 7 from public.complaints$q$, 'true');
+select t.eq('D (admin) ve las denuncias', '{D}', 'authenticated', $q$select count(*) >= 2 from public.complaints$q$, 'true');
 select t.ex('A (usuaria normal) NO puede cambiar el estado de denuncias', '{A}', 'authenticated', $q$update public.complaints set status = 'cerrada'$q$, 'OK rows=0');
 select t.ex('D gestiona la denuncia: estado, prioridad, notas y atendida', '{D}', 'authenticated',
   format($q$update public.complaints set status = 'en_revision', priority = 'alta', internal_notes = 'nota privada del equipo', public_update = 'Estamos revisando tu reporte', attended = true where tracking_code = %L$q$,
@@ -638,6 +674,9 @@ select t.ex('A (dueña) NO puede subir a la galería de aliados', '{A}', 'authen
 select t.ex('C (aliado) sube su logotipo', '{C}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('business-media', '{C}/logo.png')$q$, 'OK rows=1');
 select t.ex('C NO puede subir a la carpeta de E', '{C}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('business-media', '{E}/logo.png')$q$, 'ERR 42501%');
 select t.ex('NADIE sube evidencia de denuncias desde el navegador (ni el admin)', '{D}', 'authenticated', $q$insert into storage.objects (bucket_id, name) values ('complaint-evidence', 'x/foto.jpg')$q$, 'ERR 42501%');
+select t.ex('Un anónimo tampoco sube evidencia', null, 'anon', $q$insert into storage.objects (bucket_id, name) values ('complaint-evidence', 'x/foto.jpg')$q$, 'ERR 42501%');
+select t.ex('SOLO el servidor (la función segura) sube evidencia', null, 'service_role', $q$insert into storage.objects (bucket_id, name, metadata) values ('complaint-evidence', 'servidor/1.jpg', '{"size": 1000}')$q$, 'OK rows=1');
+delete from storage.objects where bucket_id = 'complaint-evidence' and name = 'servidor/1.jpg';
 insert into storage.objects (bucket_id, name) values ('complaint-evidence', 'denuncia1/foto.jpg');
 select t.eq('El admin ve la evidencia de denuncias', '{D}', 'authenticated', $q$select count(*) from storage.objects where bucket_id = 'complaint-evidence'$q$, '1');
 select t.eq('Un usuario normal NO ve la evidencia', '{A}', 'authenticated', $q$select count(*) from storage.objects where bucket_id = 'complaint-evidence'$q$, '0');
@@ -659,10 +698,10 @@ select t.eq('Un visitante anónimo solo tiene acceso a tablas de contenido públ
   $q$select string_agg(c.relname, ',' order by c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind = 'r' and has_any_column_privilege('anon', c.oid, 'select,insert,update,references')$q$,
   'care_guides,subscription_plans');
-select t.eq('El anónimo solo puede ejecutar 6 funciones públicas', null, 'service_role',
+select t.eq('El anónimo solo puede ejecutar 5 funciones públicas', null, 'service_role',
   $q$select string_agg(p.proname, ',' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute')$q$,
-  'directory_get,directory_search,directory_track,get_public_pet_profile,submit_complaint,track_complaint');
+  'directory_get,directory_search,directory_track,get_public_pet_profile,track_complaint');
 select t.eq('admin_roles es inaccesible para anon y authenticated', null, 'service_role',
   $q$select (has_table_privilege('anon', 'public.admin_roles', 'select,insert,update,delete')
           or has_table_privilege('authenticated', 'public.admin_roles', 'select,insert,update,delete')

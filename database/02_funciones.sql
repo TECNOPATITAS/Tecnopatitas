@@ -101,10 +101,22 @@ $$;
 
 -- Huella anónima del visitante: hash(IP + sal secreta + día). No se guarda
 -- la IP y la huella cambia cada día, así que no sirve para rastrear personas.
+-- ip_key() la calcula a partir de una IP que ya conocemos (la función segura de denuncias la recibe del servidor);
+-- client_key() la saca de las cabeceras de la petición (las demás funciones públicas, llamadas desde el navegador).
+create or replace function private.ip_key(p_ip text)
+returns text language plpgsql stable security definer set search_path = ''
+as $$
+declare v_salt text;
+begin
+  select value into v_salt from private.settings where key = 'ip_salt';
+  return encode(sha256(convert_to(coalesce(nullif(btrim(p_ip), ''), 'sin-ip') || ':' || coalesce(v_salt, '') || ':' || current_date::text, 'UTF8')), 'hex');
+end;
+$$;
+
 create or replace function private.client_key()
 returns text language plpgsql stable security definer set search_path = ''
 as $$
-declare v_headers jsonb; v_ip text; v_salt text;
+declare v_headers jsonb; v_ip text;
 begin
   begin
     v_headers := nullif(current_setting('request.headers', true), '')::jsonb;
@@ -113,8 +125,7 @@ begin
   end;
   v_ip := nullif(btrim(coalesce(v_headers ->> 'cf-connecting-ip',
                                 split_part(coalesce(v_headers ->> 'x-forwarded-for', ''), ',', 1), '')), '');
-  select value into v_salt from private.settings where key = 'ip_salt';
-  return encode(sha256(convert_to(coalesce(v_ip, 'sin-ip') || ':' || coalesce(v_salt, '') || ':' || current_date::text, 'UTF8')), 'hex');
+  return private.ip_key(v_ip);
 end;
 $$;
 
@@ -571,19 +582,46 @@ create trigger tp_audit after update on public.complaints for each row execute f
 -- =====================================================================
 
 -- ---- Denuncias anónimas ---------------------------------------------
--- p_website es un campo trampa ("honeypot"): los humanos no lo ven; si
--- viene lleno es un robot y se descarta sin avisarle.
+-- IMPORTANTE (Etapa 6): estas dos funciones NO las llama el navegador. Solo las ejecuta la función segura
+-- «submit-complaint» (Supabase Edge Function) con la clave secreta del servidor, DESPUÉS de comprobar Cloudflare
+-- Turnstile y de limpiar las fotos. Así nadie puede saltarse el anti-robots llamando a la base de datos directamente.
+-- La IP del visitante llega como parámetro (la función segura la lee de su propia petición); aquí solo se guarda su
+-- «huella» del día (hash con sal), nunca la IP.
+drop function if exists public.submit_complaint(text, text, date, text, text, text, text, text[], text);
+
+-- Paso 1: aplica los límites ANTES de subir fotos (la cuota de archivos gratuita es pequeña).
+create or replace function public.complaint_precheck(p_client_ip text, p_photos integer default 0)
+returns void language plpgsql volatile security definer set search_path = ''
+as $$
+declare v_key text; v_used bigint;
+begin
+  if coalesce(p_photos, 0) < 0 or coalesce(p_photos, 0) > 3 then
+    raise exception 'Máximo 3 fotografías.' using errcode = '22023';
+  end if;
+  v_key := private.ip_key(p_client_ip);
+  perform private.rate_limit('complaint_h', v_key, 'hour', 5);
+  perform private.rate_limit('complaint_d', v_key, 'day', 15);
+  perform private.rate_limit('complaint_g', 'all', 'day', 300);   -- tope global: protege la cuota de la base gratuita
+  if coalesce(p_photos, 0) > 0 then
+    perform private.rate_limit('complaint_photo_g', 'all', 'day', 100);   -- tope global de reportes con fotos por día
+    select coalesce(sum((o.metadata ->> 'size')::bigint), 0) into v_used
+      from storage.objects o where o.bucket_id = 'complaint-evidence';
+    if v_used > 300 * 1024 * 1024 then                            -- 300 MB de los 1 GB gratuitos reservados para evidencias
+      raise exception 'Por ahora no podemos recibir fotografías. Envía tu reporte sin fotos o inténtalo más tarde.' using errcode = 'P0001';
+    end if;
+  end if;
+end;
+$$;
+
+-- Paso 2: registra la denuncia y devuelve el código de seguimiento. Las fotos ya están subidas con rutas «carpeta/n.jpg».
 create or replace function public.submit_complaint(
   p_type text, p_description text, p_approx_date date, p_state text, p_municipality text,
   p_location_reference text default null, p_extra_info text default null,
-  p_photo_paths text[] default '{}', p_website text default null)
+  p_photo_paths text[] default '{}')
 returns text language plpgsql volatile security definer set search_path = ''
 as $$
-declare v_key text; v_code text; v_try integer := 0; v_path text;
+declare v_code text; v_try integer := 0; v_path text;
 begin
-  if coalesce(btrim(p_website), '') <> '' then
-    return private.new_tracking_code();                    -- robot: respuesta falsa, nada se guarda
-  end if;
   if p_type is null or p_type not in ('maltrato_fisico', 'abandono', 'sin_agua_alimento_refugio',
                                       'hacinamiento_insalubre', 'comercio_ilegal', 'otra') then
     raise exception 'Selecciona el tipo de situación.' using errcode = '22023';
@@ -594,22 +632,21 @@ begin
   if p_approx_date is null or p_approx_date > private.today_mx() + 1 or p_approx_date < date '2000-01-01' then
     raise exception 'La fecha aproximada no es válida.' using errcode = '22023';
   end if;
-  if coalesce(char_length(btrim(p_state)), 0) < 2 or coalesce(char_length(btrim(p_municipality)), 0) < 2 then
+  if coalesce(char_length(btrim(p_state)), 0) < 2 or coalesce(char_length(btrim(p_municipality)), 0) < 2
+     or char_length(btrim(p_state)) > 80 or char_length(btrim(p_municipality)) > 80 then
     raise exception 'Indica el estado y el municipio.' using errcode = '22023';
+  end if;
+  if char_length(coalesce(p_location_reference, '')) > 300 then
+    raise exception 'La referencia del lugar admite hasta 300 caracteres.' using errcode = '22023';
   end if;
   if coalesce(cardinality(p_photo_paths), 0) > 3 then
     raise exception 'Máximo 3 fotografías.' using errcode = '22023';
   end if;
   foreach v_path in array coalesce(p_photo_paths, '{}') loop
-    if v_path is null or v_path !~ '^[A-Za-z0-9][A-Za-z0-9._/-]{0,198}$' or v_path like '%..%' then
+    if v_path is null or v_path !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[1-3]\.jpg$' then
       raise exception 'Ruta de fotografía no válida.' using errcode = '22023';
     end if;
   end loop;
-
-  v_key := private.client_key();
-  perform private.rate_limit('complaint_h', v_key, 'hour', 5);
-  perform private.rate_limit('complaint_d', v_key, 'day', 15);
-  perform private.rate_limit('complaint_g', 'all', 'day', 300);   -- tope global: protege la cuota de la base gratuita
 
   loop
     v_try := v_try + 1;

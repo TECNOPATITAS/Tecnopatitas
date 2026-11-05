@@ -104,8 +104,9 @@ select pg_temp.pol('tp_guides_admin', $p$
   with check (bucket_id = 'guide-images' and (select public.is_admin())) $p$);
 
 -- ---- complaint-evidence (privado): solo administradores leen o borran. -------
--- No hay política de subida: las fotos de denuncias se subirán en la Etapa 6
--- mediante una función segura del servidor (no desde el navegador directamente).
+-- No hay política de subida: las fotos de denuncias las sube únicamente la función segura
+-- «submit-complaint» (Etapa 6) con la clave secreta del servidor, que no está sujeta a estas políticas.
+-- Desde el navegador nadie puede subir ahí, ni siquiera un administrador.
 select pg_temp.pol('tp_evidence_admin_read', $p$
   create policy tp_evidence_admin_read on storage.objects for select to authenticated
   using (bucket_id = 'complaint-evidence' and (select public.is_admin())) $p$);

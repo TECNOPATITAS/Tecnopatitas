@@ -188,7 +188,8 @@ select pg_temp.pol('public.business_promotions', 'promo_delete', $p$
 
 -- ---------------------------------------------------------------------
 -- Denuncias: NADIE las inserta directamente (ni siquiera usuarios con sesión);
--- se reciben con submit_complaint(). Solo administradores las leen y gestionan,
+-- se reciben con submit_complaint(), que solo ejecuta la función segura del servidor (Etapa 6).
+-- Solo administradores las leen y gestionan,
 -- y solo pueden cambiar estado, prioridad, notas y seguimiento.
 -- ---------------------------------------------------------------------
 grant select on public.complaints to authenticated;
@@ -265,13 +266,20 @@ select pg_temp.pol('public.admin_audit_log', 'audit_select_admin', $p$
 -- ---------------------------------------------------------------------
 -- Funciones que el navegador puede llamar (todo lo demás está cerrado)
 -- ---------------------------------------------------------------------
--- Público (sin sesión): reportar, consultar seguimiento, placa QR, directorio.
-grant execute on function public.submit_complaint(text, text, date, text, text, text, text, text[], text) to anon, authenticated;
+-- Público (sin sesión): consultar seguimiento, placa QR, directorio.
+-- (Reportar NO está aquí: las denuncias solo entran por la función segura «submit-complaint», que usa la clave secreta
+--  del servidor después de comprobar Cloudflare Turnstile. Ver más abajo, «Solo el servidor».)
 grant execute on function public.track_complaint(text) to anon, authenticated;
 grant execute on function public.get_public_pet_profile(text) to anon, authenticated;
 grant execute on function public.directory_search(text, text, text, integer, integer) to anon, authenticated;
 grant execute on function public.directory_get(uuid) to anon, authenticated;
 grant execute on function public.directory_track(uuid, text) to anon, authenticated;
+
+-- Solo el servidor (clave secreta de la función segura de denuncias; nunca el navegador).
+revoke execute on function public.complaint_precheck(text, integer) from public, anon, authenticated;
+revoke execute on function public.submit_complaint(text, text, date, text, text, text, text, text[]) from public, anon, authenticated;
+grant execute on function public.complaint_precheck(text, integer) to service_role;
+grant execute on function public.submit_complaint(text, text, date, text, text, text, text, text[]) to service_role;
 
 -- Con sesión.
 grant execute on function public.is_admin(), public.is_active_user(), public.is_business_account() to authenticated;
