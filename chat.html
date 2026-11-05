@@ -1,3 +1,37 @@
 <!DOCTYPE html>
 <html lang="es-MX"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atención al cliente · TECNOPATITAS</title><meta name="description" content="Atención al cliente"><meta name="robots" content="noindex"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"></head>
-<body data-page="chat" data-guard="any"><a class="skip" href="#main">Saltar al contenido</a><div id="site-header"></div><main id="main"><div class="app"><nav class="side" aria-label="Sección"><a href="perfil.html">👤 Perfil</a><a data-only="owner" hidden href="mascota.html">🐕 Mis mascotas</a><a data-only="owner" hidden href="carnet.html">🩺 Carnet digital</a><a href="notificaciones.html">🔔 Notificaciones</a><a href="chat.html" aria-current="page">💬 Atención al cliente</a><a href="planes.html">⭐ Mi suscripción</a><a data-only="business" hidden href="panel-aliado.html">🏪 Panel de aliado</a><a data-only="admin" hidden href="admin.html">🛠️ Administración</a></nav><div><h1 style="font-size:2rem">Atención al cliente</h1><p class="stage"><b>Sesión verificada en la Etapa 3. Esta sección se conecta en la Etapa 7.</b> Chat en tiempo real con Supabase Realtime. Aún no hay conversaciones ni respuestas automáticas.</p><div class="chat"><div><b>Conversaciones</b><small>No hay conversaciones.</small><button class="btn sm" disabled>Nueva conversación</button></div><div><b>Mensajes</b><small style="flex:1">Selecciona o crea una conversación.</small><form data-stage="7" style="display:flex;gap:8px"><input name="m" placeholder="Escribe tu mensaje" aria-label="Mensaje" required><button class="btn coral">Enviar</button></form></div></div></div></div></main><div id="site-footer"></div><div id="toast" role="status" aria-live="polite"></div><script src="js/config.js"></script><script src="js/tp-client.js"></script><script src="js/tp-ui.js"></script><script src="js/layout.js"></script><script src="js/guard.js"></script></body></html>
+<body data-page="chat" data-guard="any"><a class="skip" href="#main">Saltar al contenido</a><div id="site-header"></div><main id="main"><div class="app"><nav class="side" aria-label="Sección"><a href="perfil.html">👤 Perfil</a><a data-only="owner" hidden href="mascota.html">🐕 Mis mascotas</a><a data-only="owner" hidden href="carnet.html">🩺 Carnet digital</a><a href="notificaciones.html">🔔 Notificaciones</a><a href="chat.html" aria-current="page">💬 Atención al cliente</a><a href="planes.html">⭐ Mi suscripción</a><a data-only="business" hidden href="panel-aliado.html">🏪 Panel de aliado</a><a data-only="admin" hidden href="admin.html">🛠️ Administración</a></nav><div><h1 style="font-size:2rem">Atención al cliente</h1>
+<p class="mut" id="ch-intro">Escribe tu duda y el equipo de TECNOPATITAS te responderá en esta misma pantalla. No es un asistente automático: una persona del equipo lee tus mensajes y puede tardar en contestar. <b>Nunca te pediremos contraseñas ni datos de tarjeta: no los compartas aquí.</b></p>
+<div id="ch-msg" class="msg" hidden></div>
+<div class="chat" id="chat" data-view="list">
+<section class="chat-list" aria-labelledby="ch-h-list">
+<div class="chat-head"><h2 id="ch-h-list">Conversaciones</h2><button class="btn coral sm" id="ch-new" type="button">Nueva</button></div>
+<p class="mut" id="ch-loading" role="status">Cargando…</p>
+<p class="mut" id="ch-empty" hidden>Todavía no tienes conversaciones. Pulsa «Nueva» para escribirnos.</p>
+<ul class="chat-ul" id="ch-list" aria-label="Tus conversaciones"></ul>
+</section>
+<section class="chat-thread" aria-label="Mensajes">
+<p class="mut" id="ch-placeholder">Selecciona una conversación o crea una nueva.</p>
+<form id="f-new" hidden novalidate>
+<div class="chat-bar"><button class="btn ghost sm chat-back" type="button" data-back>← Conversaciones</button><h2 style="margin:0;font-size:1.15rem">Nueva conversación</h2></div>
+<label for="n-asunto">Asunto <small>(3 a 120 caracteres)</small></label>
+<input id="n-asunto" name="asunto" maxlength="120" autocomplete="off" required>
+<label for="n-texto">Mensaje <small>(hasta 2000 caracteres)</small></label>
+<textarea id="n-texto" name="texto" rows="5" required></textarea>
+<p class="mut" style="margin:0 0 10px"><small id="n-cuenta" aria-live="off">0 / 2000</small></p>
+<div class="chat-actions"><button class="btn coral" type="submit" id="n-enviar">Enviar</button><button class="btn ghost" type="button" id="n-cancelar">Cancelar</button></div>
+</form>
+<div id="ch-thread" hidden>
+<div class="chat-bar"><button class="btn ghost sm chat-back" type="button" data-back>← Conversaciones</button><div class="chat-title"><h2 id="th-asunto" tabindex="-1" style="margin:0;font-size:1.15rem"></h2><span class="mut" id="th-estado"></span></div><button class="btn ghost sm" type="button" id="th-cerrar">Cerrar conversación</button></div>
+<p class="mut chat-live" id="ch-live" role="status"></p>
+<div class="chat-more" id="th-mas-wrap" hidden><button class="btn ghost sm" type="button" id="th-mas">Cargar mensajes anteriores</button></div>
+<div class="chat-log" id="th-log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Mensajes de la conversación" tabindex="0"></div>
+<form id="f-send" novalidate>
+<label for="s-texto" class="sr-only">Escribe tu mensaje</label>
+<textarea id="s-texto" name="texto" rows="3" placeholder="Escribe tu mensaje" required></textarea>
+<div class="chat-actions"><small class="mut" id="s-cuenta" aria-live="off">0 / 2000</small><button class="btn coral" type="submit" id="s-enviar">Enviar</button></div>
+</form>
+<p class="msg info" id="th-aviso" hidden></p>
+</div>
+</section>
+</div></div></div></div></main><div id="site-footer"></div><div id="toast" role="status" aria-live="polite"></div><script src="js/config.js"></script><script src="js/tp-client.js"></script><script src="js/tp-ui.js"></script><script src="js/layout.js"></script><script src="js/guard.js"></script><script src="js/tp-realtime.js"></script><script src="js/pages/chat.js"></script></body></html>

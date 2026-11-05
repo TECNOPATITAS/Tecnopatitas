@@ -288,6 +288,7 @@ grant execute on function public.cancel_my_subscription() to authenticated;
 grant execute on function public.regenerate_pet_qr_token(uuid) to authenticated;
 grant execute on function public.storage_has_room(text, integer) to authenticated;
 grant execute on function public.has_qr_plan() to authenticated;
+grant execute on function public.start_conversation(text, text) to authenticated;
 
 -- Administración (cada función vuelve a comprobar is_admin() en el servidor).
 grant execute on function public.admin_dashboard_stats() to authenticated;

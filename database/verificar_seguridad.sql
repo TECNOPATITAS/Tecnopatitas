@@ -26,7 +26,7 @@ exp_auth_fn as (select unnest(array[
   'admin_assign_subscription','admin_cancel_subscription','admin_dashboard_stats','admin_list_users','admin_renew_subscription',
   'admin_set_business_status','admin_set_business_verified','admin_set_subscription_dates','admin_set_user_suspended',
   'cancel_my_subscription','directory_get','directory_search','directory_track','get_public_pet_profile','is_active_user','is_admin',
-  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','storage_has_room','track_complaint']) as f),
+  'has_qr_plan','is_business_account','my_entitlements','regenerate_pet_qr_token','start_conversation','storage_has_room','track_complaint']) as f),
 checks(n, grupo, comprobacion, ok, detalle) as (values
   -- ---------------- Estructura ----------------
   (10, 'Estructura', 'Existen las 19 tablas de la plataforma en "public"',
@@ -40,10 +40,10 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     (select count(*) from tbl where nspname = 'private') = 2, (select string_agg(relname, ', ') from tbl where nspname = 'private')),
   (12, 'Estructura', 'El disparador de registro (tp_new_user) existe en auth.users',
     exists (select 1 from pg_trigger where tgrelid = 'auth.users'::regclass and tgname = 'tp_new_user' and not tgisinternal and tgenabled <> 'D'), null),
-  (13, 'Estructura', 'Existen los 23 disparadores de protección (carnet, QR, aliados, chat, denuncias…)',
+  (13, 'Estructura', 'Existen los 24 disparadores de protección (carnet, QR, aliados, chat, denuncias…)',
     (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'tp\_%' and t.tgenabled <> 'D') = 23,
-    (select count(*)::text || ' de 23 activos' from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'tp\_%' and t.tgenabled <> 'D') = 24,
+    (select count(*)::text || ' de 24 activos' from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'tp\_%' and t.tgenabled <> 'D')),
 
   -- ---------------- RLS ----------------
@@ -67,7 +67,7 @@ checks(n, grupo, comprobacion, ok, detalle) as (values
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_public_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('anon', oid, 'execute'))),
-  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 22 funciones previstas',
+  (32, 'Permisos', 'Un usuario con sesión solo puede ejecutar las 23 funciones previstas',
     coalesce((select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')), '')
       = (select string_agg(f, ',' order by f) from exp_auth_fn),
     (select string_agg(proname, ',' order by proname) from fn where has_function_privilege('authenticated', oid, 'execute')

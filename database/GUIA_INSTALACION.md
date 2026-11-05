@@ -94,7 +94,7 @@ Solo dos datos, ambos **públicos por diseño** (la seguridad la dan las políti
 
 ## Para desarrolladores: ejecutar las pruebas en tu computadora (opcional)
 
-Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 420 pruebas de seguridad y funcionamiento:
+Requiere PostgreSQL 15 o superior y que puedas crear bases de datos. Simula Supabase con `pruebas/shim_supabase.sql`, instala todo en una base llamada `tp_test` y ejecuta 457 pruebas de seguridad y funcionamiento:
 
 ```bash
 bash database/pruebas/ejecutar_pruebas.sh

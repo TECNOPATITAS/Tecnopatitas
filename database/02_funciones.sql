@@ -391,6 +391,25 @@ begin
      (select count(*) from public.conversations c where c.user_id = new.user_id and c.status = 'abierta') >= 10 then
     raise exception 'Tienes demasiadas conversaciones abiertas. Cierra alguna antes de crear otra.' using errcode = 'P0001';
   end if;
+  -- Tope diario: evita llenar la base (plan gratuito) abriendo y cerrando conversaciones vacías.
+  if not private.is_backend() and
+     (select count(*) from public.conversations c
+      where c.user_id = new.user_id and c.created_at > now() - interval '24 hours') >= 20 then
+    raise exception 'Creaste muchas conversaciones hoy. Escribe en una de las que ya tienes o inténtalo mañana.' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+-- Solo el equipo (o el servidor) puede REABRIR una conversación cerrada. La persona puede cerrarla, no reabrirla:
+-- así el tope de conversaciones abiertas no se esquiva cerrando y reabriendo.
+create or replace function private.guard_conversation_status()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if old.status = 'cerrada' and new.status = 'abierta' and not private.is_backend() and not public.is_admin() then
+    raise exception 'La conversación está cerrada. Abre una nueva.' using errcode = 'P0001';
+  end if;
   return new;
 end;
 $$;
@@ -422,6 +441,11 @@ begin
         where m.sender_id = new.sender_id and m.created_at > now() - interval '10 minutes') >= 20 then
       raise exception 'Enviaste demasiados mensajes seguidos. Espera unos minutos.' using errcode = 'P0001';
     end if;
+    -- Tope diario por cuenta (protege el plan gratuito de almacenamiento y de conexiones).
+    if (select count(*) from public.messages m
+        where m.sender_id = new.sender_id and m.sender_role = 'user' and m.created_at > now() - interval '24 hours') >= 100 then
+      raise exception 'Llegaste al límite de 100 mensajes en 24 horas. Vuelve a escribirnos más tarde.' using errcode = 'P0001';
+    end if;
   end if;
   return new;
 end;
@@ -442,6 +466,28 @@ begin
     perform private.notify(v_owner, 'mensaje', 'Nueva respuesta de atención al cliente', left(new.body, 140), 'chat.html');
   end if;
   return new;
+end;
+$$;
+
+-- Crea la conversación Y su primer mensaje en una sola operación (si algo falla, no queda nada a medias).
+-- SECURITY INVOKER: se ejecuta con los permisos y las políticas de la persona que llama; no salta ninguna regla.
+create or replace function public.start_conversation(p_subject text, p_body text)
+returns uuid language plpgsql security invoker set search_path = ''
+as $$
+declare v_id uuid; v_subject text := btrim(coalesce(p_subject, '')); v_body text := btrim(coalesce(p_body, ''));
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Inicia sesión para escribirnos.' using errcode = 'P0001';
+  end if;
+  if char_length(v_subject) < 3 or char_length(v_subject) > 120 then
+    raise exception 'El asunto debe tener entre 3 y 120 caracteres.' using errcode = 'P0001';
+  end if;
+  if char_length(v_body) < 1 or char_length(v_body) > 2000 then
+    raise exception 'El mensaje debe tener entre 1 y 2000 caracteres.' using errcode = 'P0001';
+  end if;
+  insert into public.conversations (subject) values (v_subject) returning id into v_id;
+  insert into public.messages (conversation_id, body) values (v_id, v_body);
+  return v_id;
 end;
 $$;
 
@@ -560,6 +606,9 @@ create trigger tp_guard before insert or update of plan_id, user_id on public.su
 
 drop trigger if exists tp_guard on public.conversations;
 create trigger tp_guard before insert on public.conversations for each row execute function private.before_conversation();
+
+drop trigger if exists tp_status on public.conversations;
+create trigger tp_status before update of status on public.conversations for each row execute function private.guard_conversation_status();
 
 drop trigger if exists tp_before on public.messages;
 create trigger tp_before before insert on public.messages for each row execute function private.before_message();

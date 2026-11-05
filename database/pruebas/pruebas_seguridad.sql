@@ -586,6 +586,70 @@ select t.ex('Límite de mensajes seguidos (anti-spam)', '{A}', 'authenticated', 
 insert into public.conversations (user_id, subject) select '{F}', 'Consulta número ' || g from generate_series(1, 10) g;
 select t.ex('Máximo 10 conversaciones abiertas por persona', '{F}', 'authenticated', $q$insert into public.conversations (subject) values ('una más')$q$, 'ERR P0001%');
 
+-- ---- Etapa 7: conversación atómica, tope diario, reapertura, aislamiento ----
+select t.ex('B inicia una conversación con su primer mensaje (una sola operación)', '{B}', 'authenticated',
+  $q$select public.start_conversation('  Problema con mi QR  ', '  Mi placa no abre  ')$q$, 'OK rows=1');
+select t.eq('start_conversation: crea una sola conversación', '{B}', 'authenticated',
+  $q$select (count(*) = 1)::text from public.conversations where subject = 'Problema con mi QR'$q$, 'true');
+select t.eq('start_conversation: guarda asunto y mensaje sin espacios sobrantes', '{B}', 'authenticated',
+  $q$select m.body from public.messages m join public.conversations c on c.id = m.conversation_id where c.subject = 'Problema con mi QR'$q$, 'Mi placa no abre');
+select t.eq('start_conversation: el mensaje queda como de la persona (user)', null, 'service_role',
+  $q$select m.sender_role from public.messages m join public.conversations c on c.id = m.conversation_id where c.subject = 'Problema con mi QR'$q$, 'user');
+select t.eq('start_conversation: la conversación es de quien la inició', null, 'service_role',
+  $q$select user_id::text from public.conversations where subject = 'Problema con mi QR'$q$, '{B}');
+select t.eq('start_conversation: devuelve el id (uuid) de la conversación nueva', '{B}', 'authenticated',
+  $q$select (public.start_conversation('Segundo asunto', 'hola')::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')::text$q$, 'true');
+select t.ex('start_conversation: un anónimo NO puede llamarla', null, 'anon', $q$select public.start_conversation('Hola amigos', 'x')$q$, 'ERR 42501%');
+select t.ex('start_conversation: asunto demasiado corto → mensaje en español', '{B}', 'authenticated', $q$select public.start_conversation('ab', 'hola')$q$, 'ERR P0001%asunto%');
+select t.ex('start_conversation: asunto vacío (solo espacios)', '{B}', 'authenticated', $q$select public.start_conversation('     ', 'hola')$q$, 'ERR P0001%asunto%');
+select t.ex('start_conversation: asunto nulo', '{B}', 'authenticated', $q$select public.start_conversation(null, 'hola')$q$, 'ERR P0001%asunto%');
+select t.ex('start_conversation: mensaje vacío', '{B}', 'authenticated', $q$select public.start_conversation('Asunto válido', '   ')$q$, 'ERR P0001%mensaje%');
+select t.ex('start_conversation: mensaje nulo', '{B}', 'authenticated', $q$select public.start_conversation('Asunto válido', null)$q$, 'ERR P0001%mensaje%');
+select t.ex('start_conversation: mensaje de más de 2000 caracteres', '{B}', 'authenticated', $q$select public.start_conversation('Asunto válido', repeat('a', 2001))$q$, 'ERR P0001%mensaje%');
+select t.ex('start_conversation: mensaje de exactamente 2000 caracteres sí', '{B}', 'authenticated', $q$select public.start_conversation('Asunto largo ok', repeat('a', 2000))$q$, 'OK rows=1');
+select t.ex('start_conversation: asunto de más de 120 caracteres', '{B}', 'authenticated', $q$select public.start_conversation(repeat('a', 121), 'hola')$q$, 'ERR P0001%asunto%');
+select t.eq('start_conversation: si algo falla NO queda una conversación vacía', '{B}', 'authenticated',
+  $q$select count(*) from public.conversations where subject in ('ab', '     ', 'Asunto válido')$q$, '0');
+insert into public.conversations (id, user_id, subject) values ('c0000000-0000-4000-8000-0000000000e1', '{E}', 'Antes de la suspensión');
+update public.profiles set is_suspended = true where id = '{E}';
+select t.ex('start_conversation: una persona suspendida NO puede abrir conversación', '{E}', 'authenticated', $q$select public.start_conversation('Quiero hablar', 'hola')$q$, 'ERR 42501%');
+select t.eq('start_conversation: tras el rechazo de una suspendida no queda nada nuevo', null, 'service_role',
+  $q$select count(*) from public.conversations where user_id = '{E}'$q$, '1');
+select t.ex('Una persona suspendida NO puede escribir ni en su propia conversación', '{E}', 'authenticated',
+  $q$insert into public.messages (conversation_id, body) values ('c0000000-0000-4000-8000-0000000000e1', 'x')$q$, 'ERR 42501%');
+select t.eq('Una persona suspendida SÍ puede leer su conversación', '{E}', 'authenticated', $q$select count(*) from public.conversations$q$, '1');
+update public.profiles set is_suspended = false where id = '{E}';
+select t.ex('start_conversation: respeta el máximo de 10 conversaciones abiertas (y no deja la nueva a medias)', '{F}', 'authenticated',
+  $q$select public.start_conversation('Una más de F', 'hola')$q$, 'ERR P0001%');
+select t.eq('start_conversation: F sigue con exactamente 10 conversaciones', null, 'service_role', $q$select count(*) from public.conversations where user_id = '{F}'$q$, '10');
+select t.ex('A cierra la conversación (antes de probar la reapertura)', '{A}', 'authenticated', $q$update public.conversations set status = 'cerrada' where id = '{CONV}'$q$, 'OK rows=1');
+select t.ex('Reabrir: la persona NO puede (hay que abrir una nueva)', '{A}', 'authenticated', $q$update public.conversations set status = 'abierta' where id = '{CONV}'$q$, 'ERR P0001%cerrada%');
+select t.eq('La conversación sigue cerrada', null, 'service_role', $q$select status from public.conversations where id = '{CONV}'$q$, 'cerrada');
+select t.ex('Reabrir: el equipo (admin) SÍ puede', '{D}', 'authenticated', $q$update public.conversations set status = 'abierta' where id = '{CONV}'$q$, 'OK rows=1');
+select t.ex('Cerrar de nuevo es posible para la persona', '{A}', 'authenticated', $q$update public.conversations set status = 'cerrada' where id = '{CONV}'$q$, 'OK rows=1');
+select t.ex('B NO puede cerrar la conversación de A', '{B}', 'authenticated', $q$update public.conversations set status = 'cerrada' where id = '{CONV}'$q$, 'OK rows=0');
+select t.ex('Un anónimo NO puede leer mensajes', null, 'anon', $q$select * from public.messages$q$, 'ERR 42501%');
+select t.ex('Un anónimo NO puede escribir mensajes', null, 'anon', $q$insert into public.messages (conversation_id, body) values ('{CONV}', 'x')$q$, 'ERR 42501%');
+-- Tope diario de 100 mensajes en 24 h (el de 10 minutos se esquiva con mensajes antiguos)
+insert into public.conversations (id, user_id, subject) values ('c0000000-0000-4000-8000-000000000099', '{C}', 'Tope diario');
+insert into public.messages (conversation_id, sender_id, body, created_at)
+  select 'c0000000-0000-4000-8000-000000000099', '{C}', 'antiguo ' || g, now() - interval '3 hours' - g * interval '1 minute' from generate_series(1, 100) g;
+select t.ex('Tope diario: con 100 mensajes en 24 h no puede enviar el 101', '{C}', 'authenticated',
+  $q$insert into public.messages (conversation_id, body) values ('c0000000-0000-4000-8000-000000000099', 'uno más')$q$, 'ERR P0001%100 mensajes%');
+select t.eq('Tope diario: el mensaje 101 no se guardó', null, 'service_role', $q$select count(*) from public.messages where conversation_id = 'c0000000-0000-4000-8000-000000000099'$q$, '100');
+select t.ex('Tope diario: el equipo puede responder aunque la persona esté en su tope', '{D}', 'authenticated',
+  $q$insert into public.messages (conversation_id, body) values ('c0000000-0000-4000-8000-000000000099', 'Te respondemos')$q$, 'OK rows=1');
+update public.messages set created_at = now() - interval '30 hours' where conversation_id = 'c0000000-0000-4000-8000-000000000099' and sender_role = 'user';
+select t.ex('Tope diario: pasadas 24 h puede volver a escribir', '{C}', 'authenticated',
+  $q$insert into public.messages (conversation_id, body) values ('c0000000-0000-4000-8000-000000000099', 'ya pasó un día')$q$, 'OK rows=1');
+select t.ex('El equipo NO tiene límite de mensajes: puede enviar 130 respuestas seguidas', '{D}', 'authenticated',
+  $q$insert into public.messages (conversation_id, body) select 'c0000000-0000-4000-8000-000000000099', 'respuesta ' || g from generate_series(1, 130) g$q$, 'OK rows=130');
+-- Tope de conversaciones creadas por día (aunque las cierre)
+insert into public.conversations (user_id, subject, status) select '{B}', 'Vacía ' || g, 'cerrada' from generate_series(1, 20) g;
+select t.ex('Tope diario: 20 conversaciones creadas en 24 h y no se puede crear otra', '{B}', 'authenticated',
+  $q$insert into public.conversations (subject) values ('otra más')$q$, 'ERR P0001%conversaciones hoy%');
+select t.ex('Tope diario: tampoco con start_conversation', '{B}', 'authenticated', $q$select public.start_conversation('Otra más', 'hola')$q$, 'ERR P0001%conversaciones hoy%');
+
 -- =====================================================================
 select t.grupo('7 Notificaciones');
 -- =====================================================================
